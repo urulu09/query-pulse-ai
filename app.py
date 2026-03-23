@@ -1,8 +1,8 @@
 """
-╔═══════════════════════════════════════════════╗
-║         QUERY PULSE AI  —  app.py             ║
-║   Natural Language  →  Professional SQL       ║
-╚═══════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════╗
+║   QUERY PULSE AI  —  app.py                      ║
+║   Turkcell Kurumsal Tema · Natural Lang → SQL    ║
+╚══════════════════════════════════════════════════╝
 """
 
 import streamlit as st
@@ -11,9 +11,9 @@ import re
 import time
 import datetime
 
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────
 # PAGE CONFIG
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────
 st.set_page_config(
     page_title="Query Pulse AI",
     page_icon="⚡",
@@ -21,86 +21,196 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ─────────────────────────────────────────────
-# GLOBAL CSS — Dark Mode + Custom Design
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────
+# GLOBAL CSS — Turkcell Kurumsal Tema
+# ─────────────────────────────────────────────────
 st.markdown("""
 <style>
-/* ── Google Fonts ── */
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap');
+/* ── Google Fonts: Inter + Roboto Mono ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Roboto+Mono:wght@400;500&display=swap');
 
-/* ── CSS Variables ── */
+/* ── Turkcell Renk Paleti ── */
 :root {
-    --bg-base:       #0a0c10;
-    --bg-card:       #10141c;
-    --bg-input:      #141820;
-    --bg-hover:      #1a2030;
-    --accent:        #00e5ff;
-    --accent-dim:    #00e5ff22;
-    --accent-glow:   0 0 24px #00e5ff55;
-    --green:         #00ff9d;
-    --red:           #ff4d6d;
-    --yellow:        #ffd166;
-    --text-primary:  #e8eaf0;
-    --text-muted:    #5a6380;
-    --text-dim:      #8892b0;
-    --border:        #1e2436;
-    --border-accent: #00e5ff44;
-    --radius:        10px;
-    --mono:          'Space Mono', monospace;
-    --display:       'Syne', sans-serif;
+    --tc-blue:        #0047BA;
+    --tc-blue-dark:   #003090;
+    --tc-blue-mid:    #1565C0;
+    --tc-blue-light:  #E8F0FB;
+    --tc-blue-pale:   #F0F5FA;
+    --tc-yellow:      #FFD100;
+    --tc-yellow-dark: #E6BC00;
+    --tc-yellow-pale: #FFFBE6;
+    --tc-navy:        #001A5E;
+    --tc-text:        #1A1A2E;
+    --tc-text-muted:  #5A6A8A;
+    --tc-text-light:  #8898AA;
+    --tc-border:      #D0DCF0;
+    --tc-border-light:#E8EEF8;
+    --tc-white:       #FFFFFF;
+    --tc-bg:          #F5F7FB;
+    --tc-success:     #00A651;
+    --tc-error:       #D32F2F;
+    --tc-warn:        #F57C00;
+    --tc-radius:      8px;
+    --tc-radius-lg:   12px;
+    --tc-shadow:      0 2px 12px rgba(0,71,186,0.10);
+    --tc-shadow-lg:   0 4px 24px rgba(0,71,186,0.14);
+    --sans:           'Inter', system-ui, sans-serif;
+    --mono:           'Roboto Mono', monospace;
 }
 
 /* ── Reset & Base ── */
 html, body, [class*="css"] {
-    background-color: var(--bg-base) !important;
-    color: var(--text-primary) !important;
-    font-family: var(--display) !important;
+    background-color: var(--tc-bg) !important;
+    color: var(--tc-text) !important;
+    font-family: var(--sans) !important;
+    font-size: 14px;
 }
 
 /* ── Hide Streamlit chrome ── */
 #MainMenu, footer, header { visibility: hidden; }
 .block-container {
-    padding: 2rem 2rem 4rem !important;
-    max-width: 820px !important;
+    padding: 0 2rem 4rem !important;
+    max-width: 860px !important;
 }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-track { background: var(--bg-base); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-track { background: var(--tc-border-light); }
+::-webkit-scrollbar-thumb { background: var(--tc-blue); border-radius: 3px; }
 
-/* ═══════════════ SIDEBAR ════════════════════ */
+/* ════════════════ HEADER ══════════════════════ */
+.tc-header {
+    background: linear-gradient(135deg, var(--tc-blue-dark) 0%, var(--tc-blue) 60%, var(--tc-blue-mid) 100%);
+    margin: -1rem -2rem 0;
+    padding: 0 2.5rem;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0,48,144,0.25);
+    position: relative;
+    overflow: hidden;
+}
+.tc-header::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 200px; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04));
+    pointer-events: none;
+}
+.tc-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.tc-header-icon {
+    width: 36px; height: 36px;
+    background: var(--tc-yellow);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    box-shadow: 0 2px 8px rgba(255,209,0,0.4);
+    flex-shrink: 0;
+}
+.tc-header-title {
+    font-family: var(--sans) !important;
+    font-size: 1.2rem !important;
+    font-weight: 800 !important;
+    color: #FFFFFF !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    letter-spacing: -0.3px;
+    line-height: 1 !important;
+}
+.tc-header-sub {
+    font-family: var(--mono) !important;
+    font-size: 0.62rem !important;
+    color: rgba(255,255,255,0.55) !important;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 2px !important;
+}
+.tc-header-badge {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: rgba(255,255,255,0.8);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+/* ════════════════ SECTION LABELS ══════════════ */
+.tc-label {
+    font-family: var(--sans) !important;
+    font-size: 0.7rem !important;
+    font-weight: 600 !important;
+    color: var(--tc-blue) !important;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 0.55rem !important;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+.tc-label::before {
+    content: '';
+    display: inline-block;
+    width: 3px; height: 14px;
+    background: var(--tc-yellow);
+    border-radius: 2px;
+}
+
+/* ════════════════ DIVIDER ══════════════════════ */
+.tc-divider {
+    height: 1px;
+    background: var(--tc-border);
+    margin: 1.4rem 0;
+}
+.tc-divider-blue {
+    height: 2px;
+    background: linear-gradient(90deg, var(--tc-blue), transparent);
+    margin: 1.4rem 0;
+    border-radius: 2px;
+}
+
+/* ════════════════ SIDEBAR ══════════════════════ */
 [data-testid="stSidebar"] {
-    background-color: #0d1017 !important;
-    border-right: 1px solid var(--border) !important;
+    background-color: var(--tc-blue-pale) !important;
+    border-right: 1px solid var(--tc-border) !important;
 }
 [data-testid="stSidebar"] > div:first-child {
-    padding: 1.8rem 1.4rem 2rem !important;
+    padding: 0 1.2rem 2rem !important;
 }
-.sb-header {
+.sb-top-bar {
+    background: var(--tc-blue);
+    margin: 0 -1.2rem 1.4rem;
+    padding: 1rem 1.2rem;
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 1.4rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--border);
 }
-.sb-header-icon { font-size: 1.1rem; }
-.sb-header-title {
-    font-family: var(--display);
-    font-size: 0.88rem;
+.sb-top-bar-icon { font-size: 1rem; }
+.sb-top-bar-title {
+    font-family: var(--sans);
+    font-size: 0.82rem;
     font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: 0.3px;
+    color: #FFFFFF;
+    letter-spacing: 0.2px;
 }
 .sb-label {
-    font-family: var(--mono);
-    font-size: 0.62rem;
-    color: var(--accent);
-    letter-spacing: 2px;
+    font-family: var(--sans);
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--tc-navy);
+    letter-spacing: 1.5px;
     text-transform: uppercase;
-    margin-bottom: 0.6rem;
+    margin-bottom: 0.5rem;
     display: flex;
     align-items: center;
     gap: 5px;
@@ -108,45 +218,46 @@ html, body, [class*="css"] {
 .sb-label::before {
     content: '';
     display: inline-block;
-    width: 10px; height: 1px;
-    background: var(--accent);
+    width: 3px; height: 12px;
+    background: var(--tc-yellow);
+    border-radius: 2px;
 }
-/* File uploader dark styling */
 [data-testid="stFileUploader"] {
-    background: var(--bg-card) !important;
-    border: 1px dashed #2a3450 !important;
-    border-radius: var(--radius) !important;
-    transition: border-color .25s !important;
+    background: var(--tc-white) !important;
+    border: 2px dashed var(--tc-border) !important;
+    border-radius: var(--tc-radius) !important;
+    transition: border-color .2s !important;
 }
 [data-testid="stFileUploader"]:hover {
-    border-color: #00e5ff88 !important;
+    border-color: var(--tc-blue) !important;
 }
 [data-testid="stFileUploader"] label { display: none !important; }
 [data-testid="stFileUploaderDropzoneInstructions"] span {
-    color: var(--text-muted) !important;
-    font-family: var(--mono) !important;
-    font-size: 0.70rem !important;
+    color: var(--tc-text-muted) !important;
+    font-family: var(--sans) !important;
+    font-size: 0.72rem !important;
 }
 [data-testid="stFileUploaderDropzone"] small {
-    color: var(--text-muted) !important;
-    font-family: var(--mono) !important;
+    color: var(--tc-text-light) !important;
+    font-family: var(--sans) !important;
     font-size: 0.62rem !important;
 }
-/* Schema preview card */
 .schema-card {
-    background: #060a10;
-    border: 1px solid #00e5ff1a;
-    border-radius: var(--radius);
+    background: var(--tc-white);
+    border: 1px solid var(--tc-border);
+    border-left: 3px solid var(--tc-blue);
+    border-radius: var(--tc-radius);
     padding: 0.85rem 1rem;
     margin-top: 0.7rem;
-    max-height: 290px;
+    max-height: 260px;
     overflow-y: auto;
+    box-shadow: var(--tc-shadow);
 }
 .schema-card pre {
     font-family: var(--mono) !important;
     font-size: 0.65rem !important;
     line-height: 1.7 !important;
-    color: #7ec8e3 !important;
+    color: var(--tc-blue-dark) !important;
     margin: 0 !important;
     white-space: pre-wrap !important;
     word-break: break-word !important;
@@ -155,209 +266,172 @@ html, body, [class*="css"] {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-top: 0.8rem;
-    font-family: var(--mono);
-    font-size: 0.62rem;
-    color: var(--green);
-    letter-spacing: 1px;
+    margin-top: 0.7rem;
+    font-family: var(--sans);
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--tc-success);
+    letter-spacing: 0.5px;
 }
 .schema-status .dot-green {
-    width: 5px; height: 5px;
+    width: 6px; height: 6px;
     border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 6px var(--green);
+    background: var(--tc-success);
     flex-shrink: 0;
 }
 .schema-inactive {
-    font-family: var(--mono);
-    font-size: 0.66rem;
-    color: var(--text-muted);
+    font-family: var(--sans);
+    font-size: 0.72rem;
+    color: var(--tc-text-muted);
     line-height: 1.7;
     padding: 0.3rem 0;
 }
-.sb-divider { height: 1px; background: var(--border); margin: 1.2rem 0; }
+.sb-divider { height: 1px; background: var(--tc-border); margin: 1.1rem 0; }
 .sb-tip {
     font-family: var(--mono);
     font-size: 0.62rem;
-    color: var(--text-muted);
+    color: var(--tc-text-muted);
     line-height: 1.75;
     padding: 0.7rem 0.85rem;
-    background: var(--bg-card);
-    border-radius: 6px;
-    border-left: 2px solid #00e5ff44;
+    background: var(--tc-white);
+    border-radius: var(--tc-radius);
+    border-left: 3px solid var(--tc-blue);
+    box-shadow: 0 1px 4px rgba(0,71,186,0.06);
 }
-/* Schema-aware mode badge on main area */
+
+/* ════════════════ SCHEMA MODE BADGE ═══════════ */
 .schema-mode-badge {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: #00ff9d0d;
-    border: 1px solid #00ff9d30;
+    background: #E8F5E9;
+    border: 1px solid #A5D6A7;
     border-radius: 20px;
-    padding: 3px 10px;
-    font-family: var(--mono);
-    font-size: 0.62rem;
-    color: var(--green);
-    letter-spacing: 1px;
+    padding: 4px 12px;
+    font-family: var(--sans);
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--tc-success);
+    letter-spacing: 0.3px;
     margin-bottom: 0.8rem;
 }
 .schema-mode-badge .dot-g {
-    width: 5px; height: 5px;
+    width: 6px; height: 6px;
     border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 5px var(--green);
+    background: var(--tc-success);
 }
 
-/* ═══════════════ HERO HEADER ════════════════ */
-.qp-header {
-    text-align: center;
-    padding: 2.5rem 0 1.5rem;
-    position: relative;
-}
-.qp-logo {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 0.5rem;
-}
-.qp-logo-icon {
-    font-size: 1.8rem;
-    filter: drop-shadow(0 0 12px var(--accent));
-    animation: pulse-icon 2.4s ease-in-out infinite;
-}
-@keyframes pulse-icon {
-    0%, 100% { filter: drop-shadow(0 0 10px #00e5ff88); }
-    50%       { filter: drop-shadow(0 0 22px #00e5ffcc); }
-}
-.qp-title {
-    font-family: var(--display) !important;
-    font-size: 2rem !important;
-    font-weight: 800 !important;
-    letter-spacing: -0.5px;
-    background: linear-gradient(135deg, #ffffff 30%, var(--accent) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin: 0 !important;
-    padding: 0 !important;
-    line-height: 1 !important;
-}
-.qp-tagline {
-    font-family: var(--mono) !important;
-    font-size: 0.72rem !important;
-    color: var(--text-muted) !important;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    margin-top: 0.4rem !important;
-}
-.qp-divider {
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--accent), transparent);
-    margin: 1.6rem 0;
-    opacity: 0.35;
+/* ════════════════ CONFIG CARDS ════════════════ */
+.config-section {
+    background: var(--tc-white);
+    border: 1px solid var(--tc-border);
+    border-radius: var(--tc-radius-lg);
+    padding: 1.2rem 1.4rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--tc-shadow);
 }
 
-/* ═══════════════ SECTION LABELS ═════════════ */
-.qp-label {
-    font-family: var(--mono) !important;
+/* ════════════════ SELECTS ══════════════════════ */
+.stSelectbox > div > div {
+    background-color: var(--tc-white) !important;
+    border: 1.5px solid var(--tc-border) !important;
+    border-radius: var(--tc-radius) !important;
+    color: var(--tc-text) !important;
+    font-family: var(--sans) !important;
+    font-size: 0.85rem !important;
+    transition: border-color .2s !important;
+}
+.stSelectbox > div > div:hover,
+.stSelectbox > div > div:focus-within {
+    border-color: var(--tc-blue) !important;
+}
+.stSelectbox label {
+    font-family: var(--sans) !important;
     font-size: 0.68rem !important;
-    color: var(--accent) !important;
-    letter-spacing: 2.5px;
-    text-transform: uppercase;
-    margin-bottom: 0.5rem !important;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    font-weight: 600 !important;
+    color: var(--tc-text-muted) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.8px !important;
 }
-.qp-label::before {
-    content: '';
-    display: inline-block;
-    width: 14px; height: 1px;
-    background: var(--accent);
+div[data-baseweb="select"] * { background-color: var(--tc-white) !important; }
+div[data-baseweb="popover"] * {
+    background-color: var(--tc-white) !important;
+    border-color: var(--tc-border) !important;
+    color: var(--tc-text) !important;
 }
 
-/* ═══════════════ TEXT AREA ══════════════════ */
+/* ════════════════ TEXT AREA ════════════════════ */
 .stTextArea textarea {
-    background-color: var(--bg-input) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    color: var(--text-primary) !important;
-    font-family: var(--display) !important;
-    font-size: 0.95rem !important;
-    padding: 14px 16px !important;
+    background-color: var(--tc-white) !important;
+    border: 1.5px solid var(--tc-border) !important;
+    border-radius: var(--tc-radius) !important;
+    color: var(--tc-text) !important;
+    font-family: var(--sans) !important;
+    font-size: 0.9rem !important;
+    padding: 12px 14px !important;
     resize: vertical !important;
-    transition: border-color .25s, box-shadow .25s !important;
-    caret-color: var(--accent) !important;
+    transition: border-color .2s, box-shadow .2s !important;
+    box-shadow: 0 1px 4px rgba(0,71,186,0.05) !important;
 }
 .stTextArea textarea:focus {
-    border-color: var(--accent) !important;
-    box-shadow: var(--accent-glow) !important;
+    border-color: var(--tc-blue) !important;
+    box-shadow: 0 0 0 3px rgba(0,71,186,0.10) !important;
     outline: none !important;
 }
-.stTextArea textarea::placeholder { color: var(--text-muted) !important; }
+.stTextArea textarea::placeholder { color: var(--tc-text-light) !important; }
 .stTextArea label { display: none !important; }
 
-/* ═══════════════ SELECTS ════════════════════ */
-.stSelectbox > div > div {
-    background-color: var(--bg-input) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    color: var(--text-primary) !important;
-    font-size: 0.88rem !important;
-}
-.stSelectbox label { display: none !important; }
-div[data-baseweb="select"] * { background-color: var(--bg-input) !important; }
-div[data-baseweb="popover"] * {
-    background-color: var(--bg-card) !important;
-    border-color: var(--border) !important;
-}
-
-/* ═══════════════ GENERATE BUTTON ════════════ */
+/* ════════════════ GENERATE BUTTON ════════════ */
 .stButton > button {
     width: 100% !important;
-    background: linear-gradient(135deg, #00bcd4, #00e5ff) !important;
-    color: #0a0c10 !important;
-    font-family: var(--display) !important;
+    background: var(--tc-yellow) !important;
+    color: var(--tc-navy) !important;
+    font-family: var(--sans) !important;
     font-weight: 700 !important;
-    font-size: 0.95rem !important;
-    letter-spacing: 1px;
+    font-size: 0.9rem !important;
+    letter-spacing: 0.3px;
     border: none !important;
-    border-radius: var(--radius) !important;
-    padding: 0.75rem 2rem !important;
+    border-radius: var(--tc-radius) !important;
+    padding: 0.72rem 2rem !important;
     cursor: pointer !important;
-    transition: transform .15s, box-shadow .2s !important;
-    box-shadow: 0 4px 20px #00e5ff33 !important;
+    transition: background .15s, box-shadow .2s, transform .1s !important;
+    box-shadow: 0 3px 12px rgba(255,209,0,0.35) !important;
 }
 .stButton > button:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 6px 28px #00e5ff55 !important;
+    background: var(--tc-yellow-dark) !important;
+    box-shadow: 0 5px 20px rgba(255,209,0,0.45) !important;
+    transform: translateY(-1px) !important;
 }
-.stButton > button:active { transform: translateY(0) !important; }
+.stButton > button:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 2px 8px rgba(255,209,0,0.3) !important;
+}
 
-/* ═══════════════ SQL OUTPUT CARD ════════════ */
+/* ════════════════ SQL OUTPUT CARD ════════════ */
 .sql-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-accent);
-    border-radius: var(--radius);
+    background: var(--tc-white);
+    border: 1px solid var(--tc-border);
+    border-top: 3px solid var(--tc-blue);
+    border-radius: var(--tc-radius-lg);
     padding: 1.4rem 1.6rem;
-    position: relative;
     margin-top: 0.5rem;
-    box-shadow: 0 4px 30px #00e5ff0a;
+    box-shadow: var(--tc-shadow-lg);
 }
 .sql-card pre {
     font-family: var(--mono) !important;
     font-size: 0.82rem !important;
     line-height: 1.75 !important;
-    color: #cdd6f4 !important;
+    color: var(--tc-blue-dark) !important;
     margin: 0 !important;
     white-space: pre-wrap !important;
     word-break: break-word !important;
 }
-.kw  { color: var(--accent);   font-weight: 700; }
-.fn  { color: var(--green); }
-.str { color: var(--yellow); }
-.cmt { color: var(--text-muted); font-style: italic; }
-.num { color: #f08080; }
+/* SQL syntax highlight */
+.kw  { color: var(--tc-blue);      font-weight: 700; }
+.fn  { color: var(--tc-success); }
+.str { color: #C0392B; }
+.cmt { color: var(--tc-text-light); font-style: italic; }
+.num { color: #7B1FA2; }
 
 .sql-status-bar {
     display: flex;
@@ -365,138 +439,157 @@ div[data-baseweb="popover"] * {
     justify-content: space-between;
     margin-top: 1rem;
     padding-top: 0.8rem;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--tc-border-light);
 }
 .sql-badge {
-    font-family: var(--mono);
+    font-family: var(--sans);
     font-size: 0.65rem;
-    color: var(--text-muted);
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--tc-text-muted);
+    letter-spacing: 0.5px;
     display: flex;
     align-items: center;
     gap: 5px;
+    background: var(--tc-blue-light);
+    padding: 3px 9px;
+    border-radius: 20px;
 }
 .sql-badge .dot {
     width: 6px; height: 6px;
     border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 6px var(--green);
+    background: var(--tc-success);
 }
 
-/* ═══════════════ STATS ROW ══════════════════ */
+/* ════════════════ STATS ROW ════════════════════ */
 .stats-row {
     display: flex;
-    gap: 1rem;
+    gap: 0.8rem;
     margin-top: 1rem;
 }
 .stat-chip {
     flex: 1;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 0.8rem;
+    background: var(--tc-white);
+    border: 1px solid var(--tc-border);
+    border-radius: var(--tc-radius);
+    padding: 0.9rem 0.8rem;
     text-align: center;
+    box-shadow: 0 1px 6px rgba(0,71,186,0.07);
+    transition: box-shadow .2s;
 }
+.stat-chip:hover { box-shadow: var(--tc-shadow); }
 .stat-chip .val {
-    font-family: var(--mono);
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--tc-blue);
 }
 .stat-chip .lbl {
-    font-size: 0.65rem;
-    color: var(--text-muted);
-    letter-spacing: 1.5px;
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: var(--tc-text-muted);
+    letter-spacing: 0.8px;
     text-transform: uppercase;
     margin-top: 2px;
 }
 
-/* ═══════════════ ALERTS ═════════════════════ */
+/* ════════════════ ALERTS ══════════════════════ */
 .qp-alert {
-    border-radius: var(--radius);
+    border-radius: var(--tc-radius);
     padding: 0.9rem 1.2rem;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
+    font-family: var(--sans);
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    margin-top: 0.5rem;
-    font-family: var(--mono);
+    margin-top: 0.6rem;
 }
 .qp-alert-error {
-    background: #ff4d6d15;
-    border: 1px solid #ff4d6d44;
-    color: #ff8fa3;
+    background: #FFEBEE;
+    border: 1px solid #FFCDD2;
+    color: var(--tc-error);
+    border-left: 4px solid var(--tc-error);
 }
 .qp-alert-warn {
-    background: #ffd16615;
-    border: 1px solid #ffd16644;
-    color: #ffd166;
+    background: #FFF3E0;
+    border: 1px solid #FFE0B2;
+    color: var(--tc-warn);
+    border-left: 4px solid var(--tc-warn);
 }
 .qp-alert-info {
-    background: var(--accent-dim);
-    border: 1px solid var(--border-accent);
-    color: var(--accent);
+    background: var(--tc-blue-light);
+    border: 1px solid var(--tc-border);
+    color: var(--tc-blue);
+    border-left: 4px solid var(--tc-blue);
 }
 .qp-alert-missing-key {
-    background: #12091f;
-    border: 1px solid #7c3aed55;
-    color: #c4b5fd;
-    border-radius: var(--radius);
+    background: #F3F0FF;
+    border: 1px solid #C5B8F8;
+    border-left: 4px solid #7C3AED;
+    color: #4C1D95;
+    border-radius: var(--tc-radius);
     padding: 1.3rem 1.5rem;
     font-size: 0.85rem;
     display: flex;
     align-items: flex-start;
     gap: 14px;
     margin-top: 1.5rem;
-    font-family: var(--mono);
+    font-family: var(--sans);
     line-height: 1.7;
-    box-shadow: 0 0 30px #7c3aed18;
 }
-.qp-alert-missing-key strong { color: #e9d5ff; font-size: 0.9rem; }
+.qp-alert-missing-key strong { color: #3B0764; font-size: 0.9rem; }
 .qp-alert-missing-key code {
-    background: #2d1f4e;
+    background: #EDE9FE;
     padding: 1px 6px;
     border-radius: 4px;
     font-size: 0.78rem;
-    color: #a78bfa;
+    font-family: var(--mono);
+    color: #7C3AED;
 }
 .qp-alert-missing-key pre {
-    background: #0a0614;
-    border: 1px solid #7c3aed33;
+    background: #F5F3FF;
+    border: 1px solid #DDD6FE;
     border-radius: 6px;
     padding: 8px 14px;
     font-family: var(--mono);
     font-size: 0.78rem;
-    color: #ffd166;
+    color: #5B21B6;
     margin: 0.5rem 0 0.3rem;
     white-space: pre;
 }
 .qp-alert-icon { font-size: 1rem; flex-shrink: 0; }
 
-/* ═══════════════ EXAMPLES PANEL ════════════ */
-.example-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.6rem;
-    margin-top: 0.5rem;
+/* ════════════════ EXPANDER ════════════════════ */
+.streamlit-expanderHeader {
+    background: var(--tc-white) !important;
+    border: 1px solid var(--tc-border) !important;
+    border-radius: var(--tc-radius) !important;
+    color: var(--tc-text-muted) !important;
+    font-family: var(--sans) !important;
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.5px !important;
+}
+.streamlit-expanderContent {
+    background: var(--tc-white) !important;
+    border: 1px solid var(--tc-border) !important;
+    border-top: none !important;
 }
 
-/* ═══════════════ HISTORY ITEM ══════════════ */
+/* ════════════════ HISTORY ITEM ════════════════ */
 .history-item {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 0.8rem 1rem;
+    background: var(--tc-white);
+    border: 1px solid var(--tc-border);
+    border-left: 3px solid var(--tc-yellow);
+    border-radius: var(--tc-radius);
+    padding: 0.75rem 1rem;
     margin-bottom: 0.5rem;
-    font-size: 0.8rem;
-    color: var(--text-dim);
-    font-family: var(--mono);
+    box-shadow: 0 1px 4px rgba(0,71,186,0.06);
 }
 .history-item .hi-prompt {
-    color: var(--text-primary);
-    font-family: var(--display);
+    color: var(--tc-text);
+    font-family: var(--sans);
     font-size: 0.82rem;
+    font-weight: 500;
     margin-bottom: 4px;
     display: -webkit-box;
     -webkit-line-clamp: 1;
@@ -504,57 +597,53 @@ div[data-baseweb="popover"] * {
     overflow: hidden;
 }
 .history-item .hi-meta {
-    color: var(--text-muted);
-    font-size: 0.68rem;
-    letter-spacing: 1px;
-}
-
-/* ═══════════════ FOOTER ═════════════════════ */
-.qp-footer {
-    text-align: center;
-    margin-top: 3rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--border);
-}
-.qp-footer span {
-    font-family: var(--mono);
+    color: var(--tc-text-light);
     font-size: 0.65rem;
-    color: var(--text-muted);
-    letter-spacing: 2px;
-    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    font-family: var(--sans);
 }
 
-/* ═══════════════ COPY BUTTON ════════════════ */
+/* ════════════════ COPY BUTTON ════════════════ */
 div[data-testid="stCopyButton"] button {
-    background: var(--bg-hover) !important;
-    border: 1px solid var(--border) !important;
-    color: var(--text-dim) !important;
+    background: var(--tc-blue-light) !important;
+    border: 1px solid var(--tc-border) !important;
+    color: var(--tc-blue) !important;
     border-radius: 6px !important;
     font-size: 0.7rem !important;
 }
 div[data-testid="stCopyButton"] button:hover {
-    border-color: var(--accent) !important;
-    color: var(--accent) !important;
+    background: var(--tc-blue) !important;
+    color: var(--tc-white) !important;
 }
 
-/* ═══════════════ SPINNER ════════════════════ */
-.stSpinner > div { border-top-color: var(--accent) !important; }
+/* ════════════════ SPINNER ══════════════════════ */
+.stSpinner > div { border-top-color: var(--tc-blue) !important; }
 
-/* ═══════════════ EXPANDER ═══════════════════ */
-.streamlit-expanderHeader {
-    background: var(--bg-card) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    color: var(--text-dim) !important;
+/* ════════════════ CODE BLOCK ══════════════════ */
+.stCodeBlock {
+    border: 1px solid var(--tc-border) !important;
+    border-radius: var(--tc-radius) !important;
+}
+.stCodeBlock pre {
+    background: var(--tc-blue-pale) !important;
     font-family: var(--mono) !important;
-    font-size: 0.75rem !important;
-    letter-spacing: 1.5px !important;
+    font-size: 0.8rem !important;
 }
-.streamlit-expanderContent {
-    background: var(--bg-card) !important;
-    border: 1px solid var(--border) !important;
-    border-top: none !important;
+
+/* ════════════════ FOOTER ══════════════════════ */
+.tc-footer {
+    text-align: center;
+    margin-top: 3rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--tc-border);
 }
+.tc-footer span {
+    font-family: var(--sans);
+    font-size: 0.65rem;
+    color: var(--tc-text-light);
+    letter-spacing: 1px;
+}
+.tc-footer strong { color: var(--tc-blue); font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -595,12 +684,7 @@ def highlight_sql(sql: str) -> str:
 
 
 def parse_schema_file(uploaded_file) -> tuple[str, int, int]:
-    """
-    Read uploaded .sql / .txt file.
-    Returns: (raw_text, char_count, table_count)
-    """
     raw = uploaded_file.read().decode("utf-8", errors="replace")
-    # Estimate table count by counting CREATE TABLE occurrences
     table_count = len(re.findall(r'\bCREATE\s+TABLE\b', raw, re.IGNORECASE))
     return raw, len(raw), table_count
 
@@ -635,12 +719,8 @@ Dialect-specific notes:
 
 
 def build_user_message(prompt: str, schema_text: str | None) -> str:
-    """
-    If a schema is loaded, prepend it as context and add strict column constraints.
-    """
     if not schema_text:
         return prompt.strip()
-
     return f"""=== DATABASE SCHEMA ===
 The following is the exact schema of the target database.
 You MUST use ONLY the table names and column names defined here.
@@ -650,8 +730,7 @@ Do NOT invent, guess, or hallucinate any table or column that is not listed belo
 
 === END OF SCHEMA ===
 
-Now generate a {{}}-dialect SQL query for the following request.
-Use exclusively the tables and columns from the schema above.
+Now generate SQL for the following request using exclusively the tables and columns above.
 
 REQUEST: {prompt.strip()}"""
 
@@ -664,9 +743,8 @@ def generate_sql(
     model: str,
     schema_text: str | None = None,
 ) -> dict:
-    """Call OpenAI and return {sql, tokens, elapsed}."""
-    client  = openai.OpenAI(api_key=api_key)
-    start   = time.time()
+    client   = openai.OpenAI(api_key=api_key)
+    start    = time.time()
     user_msg = build_user_message(prompt, schema_text)
 
     response = client.chat.completions.create(
@@ -678,7 +756,6 @@ def generate_sql(
         temperature=0.2,
         max_tokens=1400,
     )
-
     elapsed = round(time.time() - start, 2)
     sql     = response.choices[0].message.content.strip()
     tokens  = response.usage.total_tokens
@@ -698,20 +775,20 @@ def validate_result(sql: str) -> tuple[bool, str]:
 # ═════════════════════════════════════════════
 with st.sidebar:
     st.markdown("""
-    <div class="sb-header">
-        <span class="sb-header-icon">🗄️</span>
-        <span class="sb-header-title">Schema Context</span>
+    <div class="sb-top-bar">
+        <span class="sb-top-bar-icon">🗄️</span>
+        <span class="sb-top-bar-title">Şema Bağlamı</span>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown('<p class="sb-label">📂 Upload schema file</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sb-label">📂 Şema dosyası yükle</p>', unsafe_allow_html=True)
 
     uploaded_file = st.file_uploader(
         "schema_upload",
         type=["sql", "txt"],
         accept_multiple_files=False,
         label_visibility="collapsed",
-        help="Upload a .sql or .txt file containing your CREATE TABLE definitions.",
+        help="CREATE TABLE tanımlarını içeren .sql veya .txt dosyası yükleyin.",
     )
 
     schema_text: str | None = None
@@ -720,13 +797,11 @@ with st.sidebar:
     if uploaded_file is not None:
         try:
             raw, char_count, table_count = parse_schema_file(uploaded_file)
-
-            # Guard: file too large (>80 KB is risky for context window)
             if char_count > 80_000:
                 st.markdown("""
-                <div class="qp-alert qp-alert-warn" style="font-size:.7rem;padding:.7rem .9rem;">
+                <div class="qp-alert qp-alert-warn" style="font-size:.7rem;padding:.65rem .9rem;">
                     <span>⚠</span>
-                    <span>Schema file exceeds 80 KB. Please trim unused tables to stay within context limits.</span>
+                    <span>Dosya 80 KB sınırını aşıyor. Kullanılmayan tabloları kaldırın.</span>
                 </div>""", unsafe_allow_html=True)
             else:
                 schema_text = raw
@@ -735,47 +810,43 @@ with st.sidebar:
                     "tables": table_count,
                     "chars":  char_count,
                 }
-
-                # Preview card
-                preview = raw[:900] + ("\n…" if len(raw) > 900 else "")
+                preview = raw[:800] + ("\n…" if len(raw) > 800 else "")
                 st.markdown(f"""
                 <div class="schema-card">
                     <pre>{preview}</pre>
                 </div>
                 <div class="schema-status">
                     <span class="dot-green"></span>
-                    {table_count} table{'s' if table_count != 1 else ''} · {char_count:,} chars
+                    {table_count} tablo · {char_count:,} karakter
                 </div>
                 """, unsafe_allow_html=True)
-
         except Exception as e:
             st.markdown(f"""
-            <div class="qp-alert qp-alert-error" style="font-size:.7rem;padding:.7rem .9rem;">
+            <div class="qp-alert qp-alert-error" style="font-size:.7rem;padding:.65rem .9rem;">
                 <span>✖</span>
-                <span>Could not read file: {e}</span>
+                <span>Dosya okunamadı: {e}</span>
             </div>""", unsafe_allow_html=True)
     else:
         st.markdown("""
         <p class="schema-inactive">
-            No schema loaded.<br>
-            AI will use general knowledge<br>
-            to infer table structures.
+            Şema yüklenmedi.<br>
+            AI genel bilgisiyle tablo<br>
+            yapılarını tahmin edecek.
         </p>
         """, unsafe_allow_html=True)
 
     st.markdown('<div class="sb-divider"></div>', unsafe_allow_html=True)
-
     st.markdown("""
     <div class="sb-tip">
-        💡 <strong>Tip:</strong> Export your schema with<br>
+        💡 <strong>İpucu:</strong> Şemanı dışa aktar:<br>
         <code>pg_dump --schema-only</code> (PostgreSQL)<br>
-        or <code>SHOW CREATE TABLE</code> (MySQL) and paste into a .sql file.
+        <code>SHOW CREATE TABLE</code> (MySQL)
     </div>
     """, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
-# API KEY — secrets only
+# API KEY — yalnızca st.secrets
 # ─────────────────────────────────────────────
 resolved_api_key = st.secrets.get("OPENAI_API_KEY", "")
 
@@ -785,13 +856,13 @@ if not resolved_api_key:
         <span class="qp-alert-icon">🔐</span>
         <div>
             <strong>API anahtarı bulunamadı.</strong><br>
-            <span style="font-size:0.78rem;opacity:.8;">
+            <span style="font-size:0.78rem;opacity:.85;">
                 Projenizin <code>.streamlit/secrets.toml</code> dosyasına şu satırı ekleyin
                 ve uygulamayı yeniden başlatın:
             </span>
             <pre>OPENAI_API_KEY = "sk-..."</pre>
-            <span style="font-size:0.72rem;opacity:.6;">
-                Streamlit Cloud kullanıyorsanız → App Settings › Secrets bölümüne ekleyin.
+            <span style="font-size:0.72rem;opacity:.65;">
+                Streamlit Cloud → App Settings › Secrets bölümüne de ekleyebilirsiniz.
             </span>
         </div>
     </div>
@@ -800,47 +871,50 @@ if not resolved_api_key:
 
 
 # ─────────────────────────────────────────────
-# HEADER
+# HEADER — Turkcell Mavi Şerit
 # ─────────────────────────────────────────────
 st.markdown("""
-<div class="qp-header">
-    <div class="qp-logo">
-        <span class="qp-logo-icon">⚡</span>
-        <h1 class="qp-title">Query Pulse AI</h1>
+<div class="tc-header">
+    <div class="tc-header-brand">
+        <div class="tc-header-icon">⚡</div>
+        <div>
+            <div class="tc-header-title">Query Pulse AI</div>
+            <div class="tc-header-sub">Natural Language → SQL</div>
+        </div>
     </div>
-    <p class="qp-tagline">Natural Language → Professional SQL</p>
+    <div class="tc-header-badge">Powered by OpenAI</div>
 </div>
-<div class="qp-divider"></div>
+<div style="height:1.8rem"></div>
 """, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
-# CONFIGURATION ROW
+# CONFIGURATION CARD
 # ─────────────────────────────────────────────
-st.markdown('<p class="qp-label">⚙ Configuration</p>', unsafe_allow_html=True)
+st.markdown('<p class="tc-label">⚙ Yapılandırma</p>', unsafe_allow_html=True)
 
-col1, col2, col3 = st.columns([2, 2, 2])
+with st.container():
+    col1, col2, col3 = st.columns([2, 2, 2])
+    with col1:
+        dialect = st.selectbox(
+            "Dialect",
+            ["PostgreSQL", "MySQL", "SQLite", "SQL Server (T-SQL)", "BigQuery", "Snowflake"],
+            key="dialect_select",
+        )
+    with col2:
+        style = st.selectbox(
+            "Stil",
+            ["Standard", "Annotated", "Compact"],
+            key="style_select",
+        )
+    with col3:
+        model = st.selectbox(
+            "Model",
+            ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
+            key="model_select",
+        )
 
-with col1:
-    dialect = st.selectbox(
-        "dialect",
-        ["PostgreSQL", "MySQL", "SQLite", "SQL Server (T-SQL)", "BigQuery", "Snowflake"],
-        key="dialect_select",
-    )
-with col2:
-    style = st.selectbox(
-        "style",
-        ["Standard", "Annotated", "Compact"],
-        key="style_select",
-    )
-with col3:
-    model = st.selectbox(
-        "model",
-        ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
-        key="model_select",
-    )
-
-st.markdown('<div class="qp-divider"></div>', unsafe_allow_html=True)
+st.markdown('<div class="tc-divider"></div>', unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
@@ -852,10 +926,10 @@ EXAMPLES = [
     ("🔍", "Find all orders that were delivered more than 3 days late"),
     ("🔗", "Products never purchased, joined with their category names"),
     ("📈", "Running total of sales per day using a window function"),
-    ("⚠️",  "Duplicate email addresses in the users table"),
+    ("⚠️", "Duplicate email addresses in the users table"),
 ]
 
-with st.expander("✦  Quick examples — click to load", expanded=False):
+with st.expander("✦  Hızlı Örnekler — tıklayarak yükle", expanded=False):
     cols = st.columns(2)
     for i, (icon, text) in enumerate(EXAMPLES):
         with cols[i % 2]:
@@ -865,13 +939,13 @@ with st.expander("✦  Quick examples — click to load", expanded=False):
 
 
 # ─────────────────────────────────────────────
-# SCHEMA MODE BADGE (only when schema loaded)
+# SCHEMA MODE BADGE
 # ─────────────────────────────────────────────
 if schema_text:
     st.markdown(f"""
     <div class="schema-mode-badge">
         <span class="dot-g"></span>
-        Schema-Aware Mode · {schema_meta['name']} · {schema_meta['tables']} table{'s' if schema_meta['tables'] != 1 else ''}
+        Şema Modu Aktif &nbsp;·&nbsp; {schema_meta['name']} &nbsp;·&nbsp; {schema_meta['tables']} tablo
     </div>
     """, unsafe_allow_html=True)
 
@@ -879,26 +953,26 @@ if schema_text:
 # ─────────────────────────────────────────────
 # PROMPT INPUT
 # ─────────────────────────────────────────────
-st.markdown('<p class="qp-label">✦ Natural Language Prompt</p>', unsafe_allow_html=True)
+st.markdown('<p class="tc-label">✦ Doğal Dil ile Açıkla</p>', unsafe_allow_html=True)
 
-placeholder_with = (
-    "e.g. → List all users who signed up last month but haven't placed an order yet.\n"
-    "       AI will use only the columns defined in your uploaded schema."
+placeholder_schema = (
+    "Örn. → Geçen ay kaydolan ancak henüz sipariş vermemiş kullanıcıları listele.\n"
+    "       AI yalnızca yüklenen şemadaki sütunları kullanacak."
 )
-placeholder_without = (
-    "e.g. → List all users who signed up last month but haven't made a purchase yet,\n"
-    "       grouped by their referral source and sorted by sign-up date…"
+placeholder_general = (
+    "Örn. → Geçen ay kaydolan ancak henüz satın alma yapmamış kullanıcıları,\n"
+    "       referans kaynağına göre gruplandırarak kayıt tarihine göre sırala…"
 )
 
 prompt = st.text_area(
     "prompt",
     value=st.session_state.last_prompt,
-    height=110,
-    placeholder=placeholder_with if schema_text else placeholder_without,
+    height=115,
+    placeholder=placeholder_schema if schema_text else placeholder_general,
     key="prompt_input",
 )
 
-generate_clicked = st.button("⚡  Generate SQL", use_container_width=True)
+generate_clicked = st.button("⚡  SQL Oluştur", use_container_width=True)
 
 
 # ─────────────────────────────────────────────
@@ -909,11 +983,11 @@ if generate_clicked:
         st.markdown("""
         <div class="qp-alert qp-alert-warn">
             <span class="qp-alert-icon">⚠</span>
-            <span>Please enter a prompt before generating.</span>
+            <span>Lütfen oluşturmadan önce bir açıklama girin.</span>
         </div>""", unsafe_allow_html=True)
         st.stop()
 
-    spinner_msg = "Generating schema-aware SQL…" if schema_text else "Generating SQL…"
+    spinner_msg = "Şemaya özel SQL oluşturuluyor…" if schema_text else "SQL oluşturuluyor…"
 
     with st.spinner(spinner_msg):
         try:
@@ -923,41 +997,41 @@ if generate_clicked:
                 dialect=dialect,
                 style=style,
                 model=model,
-                schema_text=schema_text,   # None → general mode
+                schema_text=schema_text,
             )
         except openai.AuthenticationError:
             st.markdown("""
             <div class="qp-alert qp-alert-error">
                 <span class="qp-alert-icon">✖</span>
-                <span><strong>Authentication failed.</strong> Your API key was rejected by OpenAI.</span>
+                <span><strong>Kimlik doğrulama hatası.</strong> API anahtarınız OpenAI tarafından reddedildi.</span>
             </div>""", unsafe_allow_html=True)
             st.stop()
         except openai.RateLimitError:
             st.markdown("""
             <div class="qp-alert qp-alert-error">
                 <span class="qp-alert-icon">✖</span>
-                <span><strong>Rate limit exceeded.</strong> Try again shortly or upgrade your plan.</span>
+                <span><strong>İstek limiti aşıldı.</strong> OpenAI kotanız doldu. Kısa süre sonra tekrar deneyin.</span>
             </div>""", unsafe_allow_html=True)
             st.stop()
         except openai.APIConnectionError:
             st.markdown("""
             <div class="qp-alert qp-alert-error">
                 <span class="qp-alert-icon">✖</span>
-                <span><strong>Connection error.</strong> Could not reach the OpenAI API.</span>
+                <span><strong>Bağlantı hatası.</strong> OpenAI API'ye ulaşılamadı.</span>
             </div>""", unsafe_allow_html=True)
             st.stop()
         except openai.BadRequestError as e:
             st.markdown(f"""
             <div class="qp-alert qp-alert-error">
                 <span class="qp-alert-icon">✖</span>
-                <span><strong>Bad request.</strong> {str(e)}</span>
+                <span><strong>Hatalı istek.</strong> {str(e)}</span>
             </div>""", unsafe_allow_html=True)
             st.stop()
         except Exception as e:
             st.markdown(f"""
             <div class="qp-alert qp-alert-error">
                 <span class="qp-alert-icon">✖</span>
-                <span><strong>Unexpected error:</strong> {str(e)}</span>
+                <span><strong>Beklenmeyen hata:</strong> {str(e)}</span>
             </div>""", unsafe_allow_html=True)
             st.stop()
 
@@ -966,11 +1040,11 @@ if generate_clicked:
         st.markdown(f"""
         <div class="qp-alert qp-alert-warn">
             <span class="qp-alert-icon">⚠</span>
-            <span><strong>Model Notice:</strong> {err_msg}</span>
+            <span><strong>Model Bildirimi:</strong> {err_msg}</span>
         </div>""", unsafe_allow_html=True)
         st.stop()
 
-    # ── Store in history ──
+    # ── Store ──
     st.session_state.query_count  += 1
     st.session_state.total_tokens += result["tokens"]
     st.session_state.history.insert(0, {
@@ -984,11 +1058,11 @@ if generate_clicked:
     st.session_state.history = st.session_state.history[:20]
 
     # ── Output ──
-    st.markdown('<div style="height:1rem"></div>', unsafe_allow_html=True)
-    st.markdown('<p class="qp-label">✦ Generated SQL</p>', unsafe_allow_html=True)
+    st.markdown('<div style="height:0.8rem"></div>', unsafe_allow_html=True)
+    st.markdown('<p class="tc-label">✦ Oluşturulan SQL</p>', unsafe_allow_html=True)
 
-    schema_badge = (
-        f'<span class="sql-badge" style="color:var(--green);">'
+    schema_badge_html = (
+        f'<span class="sql-badge" style="background:#E8F5E9;color:#2E7D32;">'
         f'<span class="dot"></span>{schema_meta["name"]}</span>'
         if schema_text else ""
     )
@@ -1002,9 +1076,9 @@ if generate_clicked:
                 <span class="dot"></span>
                 {dialect}
             </span>
-            <div style="display:flex;gap:1rem;align-items:center;">
-                {schema_badge}
-                <span class="sql-badge">{result['elapsed']}s · {result['tokens']} tokens</span>
+            <div style="display:flex;gap:0.6rem;align-items:center;">
+                {schema_badge_html}
+                <span class="sql-badge">{result['elapsed']}s · {result['tokens']} token</span>
             </div>
         </div>
     </div>
@@ -1016,15 +1090,15 @@ if generate_clicked:
     <div class="stats-row">
         <div class="stat-chip">
             <div class="val">{st.session_state.query_count}</div>
-            <div class="lbl">Total Queries</div>
+            <div class="lbl">Toplam Sorgu</div>
         </div>
         <div class="stat-chip">
             <div class="val">{result['elapsed']}s</div>
-            <div class="lbl">Response Time</div>
+            <div class="lbl">Yanıt Süresi</div>
         </div>
         <div class="stat-chip">
             <div class="val">{st.session_state.total_tokens}</div>
-            <div class="lbl">Tokens Used</div>
+            <div class="lbl">Token Kullanımı</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1034,19 +1108,19 @@ if generate_clicked:
 # HISTORY PANEL
 # ─────────────────────────────────────────────
 if st.session_state.history:
-    st.markdown('<div class="qp-divider"></div>', unsafe_allow_html=True)
-    with st.expander(f"🕑  Query History  ({len(st.session_state.history)} entries)", expanded=False):
+    st.markdown('<div class="tc-divider"></div>', unsafe_allow_html=True)
+    with st.expander(f"🕑  Sorgu Geçmişi  ({len(st.session_state.history)} kayıt)", expanded=False):
         for entry in st.session_state.history:
             schema_tag = f" · 🗄 {entry['schema_name']}" if entry.get("schema_name") and entry["schema_name"] != "—" else ""
             st.markdown(f"""
             <div class="history-item">
                 <div class="hi-prompt">{entry['prompt']}</div>
-                <div class="hi-meta">{entry['ts']} · {entry['dialect']}{schema_tag} · {entry['tokens']} tokens</div>
+                <div class="hi-meta">{entry['ts']} · {entry['dialect']}{schema_tag} · {entry['tokens']} token</div>
             </div>
             """, unsafe_allow_html=True)
             st.code(entry["sql"], language="sql")
 
-        if st.button("🗑  Clear History", key="clear_history"):
+        if st.button("🗑  Geçmişi Temizle", key="clear_history"):
             st.session_state.history      = []
             st.session_state.query_count  = 0
             st.session_state.total_tokens = 0
@@ -1057,7 +1131,9 @@ if st.session_state.history:
 # FOOTER
 # ─────────────────────────────────────────────
 st.markdown("""
-<div class="qp-footer">
-    <span>Query Pulse AI &nbsp;·&nbsp; Powered by OpenAI &nbsp;·&nbsp; Built with Streamlit</span>
+<div class="tc-footer">
+    <span>
+        <strong>Query Pulse AI</strong> &nbsp;·&nbsp; OpenAI ile güçlendirilmiştir &nbsp;·&nbsp; Streamlit üzerinde çalışır
+    </span>
 </div>
 """, unsafe_allow_html=True)
