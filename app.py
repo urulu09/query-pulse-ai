@@ -173,22 +173,6 @@ div[data-baseweb="popover"] * {
     border-color: var(--border) !important;
 }
 
-/* ═══════════════ API KEY INPUT ══════════════ */
-.stTextInput input {
-    background-color: var(--bg-input) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    color: var(--text-primary) !important;
-    font-family: var(--mono) !important;
-    font-size: 0.82rem !important;
-    letter-spacing: 1px;
-    transition: border-color .25s !important;
-}
-.stTextInput input:focus {
-    border-color: var(--accent) !important;
-    box-shadow: var(--accent-glow) !important;
-}
-.stTextInput label { display: none !important; }
 
 /* ═══════════════ GENERATE BUTTON ════════════ */
 .stButton > button {
@@ -316,6 +300,40 @@ div[data-baseweb="popover"] * {
     background: var(--accent-dim);
     border: 1px solid var(--border-accent);
     color: var(--accent);
+}
+.qp-alert-missing-key {
+    background: #12091f;
+    border: 1px solid #7c3aed55;
+    color: #c4b5fd;
+    border-radius: var(--radius);
+    padding: 1.3rem 1.5rem;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-top: 1.5rem;
+    font-family: var(--mono);
+    line-height: 1.7;
+    box-shadow: 0 0 30px #7c3aed18;
+}
+.qp-alert-missing-key strong { color: #e9d5ff; font-size: 0.9rem; }
+.qp-alert-missing-key code {
+    background: #2d1f4e;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    color: #a78bfa;
+}
+.qp-alert-missing-key pre {
+    background: #0a0614;
+    border: 1px solid #7c3aed33;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: #ffd166;
+    margin: 0.5rem 0 0.3rem;
+    white-space: pre;
 }
 .qp-alert-icon { font-size: 1rem; flex-shrink: 0; }
 
@@ -568,13 +586,27 @@ with col3:
         key="model_select",
     )
 
-st.markdown('<div style="height:0.5rem"></div>', unsafe_allow_html=True)
-st.markdown('<p class="qp-label">🔑 OpenAI API Key</p>', unsafe_allow_html=True)
-api_key_input = st.text_input("api_key", type="password", placeholder="sk-…  (stored only in session memory)", key="api_key_field")
+# ── API Key: secrets only, never exposed in UI ──
+resolved_api_key = st.secrets.get("OPENAI_API_KEY", "")
 
-# Resolve API key: input field → env variable fallback
-import os
-resolved_api_key = api_key_input.strip() or os.environ.get("OPENAI_API_KEY", "")
+if not resolved_api_key:
+    st.markdown("""
+    <div class="qp-alert qp-alert-missing-key">
+        <span class="qp-alert-icon">🔐</span>
+        <div>
+            <strong>API anahtarı bulunamadı.</strong><br>
+            <span style="font-size:0.78rem;opacity:.8;">
+                Projenizin <code>.streamlit/secrets.toml</code> dosyasına şu satırı ekleyin
+                ve uygulamayı yeniden başlatın:
+            </span>
+            <pre style="margin:.6rem 0 0;font-size:.75rem;color:#ffd166;">OPENAI_API_KEY = "sk-..."</pre>
+            <span style="font-size:0.72rem;opacity:.6;">
+                Streamlit Cloud kullanıyorsanız → App Settings › Secrets bölümüne ekleyin.
+            </span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
 
 st.markdown('<div class="qp-divider"></div>', unsafe_allow_html=True)
 
@@ -629,22 +661,6 @@ if generate_clicked:
         <div class="qp-alert qp-alert-warn">
             <span class="qp-alert-icon">⚠</span>
             <span>Please enter a prompt before generating.</span>
-        </div>""", unsafe_allow_html=True)
-        st.stop()
-
-    if not resolved_api_key:
-        st.markdown("""
-        <div class="qp-alert qp-alert-error">
-            <span class="qp-alert-icon">✖</span>
-            <span>No API key found. Enter your OpenAI key above or set the <code>OPENAI_API_KEY</code> environment variable.</span>
-        </div>""", unsafe_allow_html=True)
-        st.stop()
-
-    if not resolved_api_key.startswith("sk-"):
-        st.markdown("""
-        <div class="qp-alert qp-alert-warn">
-            <span class="qp-alert-icon">⚠</span>
-            <span>API key format looks incorrect — OpenAI keys typically start with <code>sk-</code>.</span>
         </div>""", unsafe_allow_html=True)
         st.stop()
 
