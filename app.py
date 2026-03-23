@@ -9,6 +9,7 @@ import streamlit as st
 import openai
 import re
 import time
+import datetime
 
 # ─────────────────────────────────────────────
 # PAGE CONFIG
@@ -17,7 +18,7 @@ st.set_page_config(
     page_title="Query Pulse AI",
     page_icon="⚡",
     layout="centered",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ─────────────────────────────────────────────
@@ -68,6 +69,144 @@ html, body, [class*="css"] {
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: var(--bg-base); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ═══════════════ SIDEBAR ════════════════════ */
+[data-testid="stSidebar"] {
+    background-color: #0d1017 !important;
+    border-right: 1px solid var(--border) !important;
+}
+[data-testid="stSidebar"] > div:first-child {
+    padding: 1.8rem 1.4rem 2rem !important;
+}
+.sb-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 1.4rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+.sb-header-icon { font-size: 1.1rem; }
+.sb-header-title {
+    font-family: var(--display);
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.3px;
+}
+.sb-label {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 0.6rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.sb-label::before {
+    content: '';
+    display: inline-block;
+    width: 10px; height: 1px;
+    background: var(--accent);
+}
+/* File uploader dark styling */
+[data-testid="stFileUploader"] {
+    background: var(--bg-card) !important;
+    border: 1px dashed #2a3450 !important;
+    border-radius: var(--radius) !important;
+    transition: border-color .25s !important;
+}
+[data-testid="stFileUploader"]:hover {
+    border-color: #00e5ff88 !important;
+}
+[data-testid="stFileUploader"] label { display: none !important; }
+[data-testid="stFileUploaderDropzoneInstructions"] span {
+    color: var(--text-muted) !important;
+    font-family: var(--mono) !important;
+    font-size: 0.70rem !important;
+}
+[data-testid="stFileUploaderDropzone"] small {
+    color: var(--text-muted) !important;
+    font-family: var(--mono) !important;
+    font-size: 0.62rem !important;
+}
+/* Schema preview card */
+.schema-card {
+    background: #060a10;
+    border: 1px solid #00e5ff1a;
+    border-radius: var(--radius);
+    padding: 0.85rem 1rem;
+    margin-top: 0.7rem;
+    max-height: 290px;
+    overflow-y: auto;
+}
+.schema-card pre {
+    font-family: var(--mono) !important;
+    font-size: 0.65rem !important;
+    line-height: 1.7 !important;
+    color: #7ec8e3 !important;
+    margin: 0 !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+}
+.schema-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 0.8rem;
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: var(--green);
+    letter-spacing: 1px;
+}
+.schema-status .dot-green {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    flex-shrink: 0;
+}
+.schema-inactive {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    line-height: 1.7;
+    padding: 0.3rem 0;
+}
+.sb-divider { height: 1px; background: var(--border); margin: 1.2rem 0; }
+.sb-tip {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    line-height: 1.75;
+    padding: 0.7rem 0.85rem;
+    background: var(--bg-card);
+    border-radius: 6px;
+    border-left: 2px solid #00e5ff44;
+}
+/* Schema-aware mode badge on main area */
+.schema-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #00ff9d0d;
+    border: 1px solid #00ff9d30;
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: var(--green);
+    letter-spacing: 1px;
+    margin-bottom: 0.8rem;
+}
+.schema-mode-badge .dot-g {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 5px var(--green);
+}
 
 /* ═══════════════ HERO HEADER ════════════════ */
 .qp-header {
@@ -173,7 +312,6 @@ div[data-baseweb="popover"] * {
     border-color: var(--border) !important;
 }
 
-
 /* ═══════════════ GENERATE BUTTON ════════════ */
 .stButton > button {
     width: 100% !important;
@@ -215,7 +353,6 @@ div[data-baseweb="popover"] * {
     white-space: pre-wrap !important;
     word-break: break-word !important;
 }
-/* SQL syntax highlight via spans */
 .kw  { color: var(--accent);   font-weight: 700; }
 .fn  { color: var(--green); }
 .str { color: var(--yellow); }
@@ -344,30 +481,6 @@ div[data-baseweb="popover"] * {
     gap: 0.6rem;
     margin-top: 0.5rem;
 }
-.example-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 0.7rem 0.9rem;
-    font-size: 0.78rem;
-    color: var(--text-dim);
-    cursor: pointer;
-    transition: border-color .2s, color .2s;
-    font-family: var(--display);
-}
-.example-card:hover {
-    border-color: var(--accent);
-    color: var(--text-primary);
-}
-.example-card .ex-icon { margin-right: 5px; }
-
-/* ═══════════════ SIDEBAR TOGGLE ════════════ */
-.config-row {
-    display: flex;
-    gap: 0.8rem;
-    align-items: stretch;
-}
-.config-row > div { flex: 1; }
 
 /* ═══════════════ HISTORY ITEM ══════════════ */
 .history-item {
@@ -424,7 +537,7 @@ div[data-testid="stCopyButton"] button:hover {
     color: var(--accent) !important;
 }
 
-/* ═══════════════ SPINNER OVERRIDE ══════════ */
+/* ═══════════════ SPINNER ════════════════════ */
 .stSpinner > div { border-top-color: var(--accent) !important; }
 
 /* ═══════════════ EXPANDER ═══════════════════ */
@@ -450,7 +563,7 @@ div[data-testid="stCopyButton"] button:hover {
 # SESSION STATE
 # ─────────────────────────────────────────────
 if "history" not in st.session_state:
-    st.session_state.history = []          # list of {prompt, sql, dialect, ts}
+    st.session_state.history = []
 if "query_count" not in st.session_state:
     st.session_state.query_count = 0
 if "total_tokens" not in st.session_state:
@@ -475,18 +588,27 @@ SQL_KEYWORDS = [
 ]
 
 def highlight_sql(sql: str) -> str:
-    """Minimal keyword highlighting via HTML spans."""
-    # Sort by length desc so longer keywords match first
     for kw in sorted(SQL_KEYWORDS, key=len, reverse=True):
         pattern = re.compile(rf'\b({re.escape(kw)})\b', re.IGNORECASE)
         sql = pattern.sub(r'<span class="kw">\1</span>', sql)
     return sql
 
 
+def parse_schema_file(uploaded_file) -> tuple[str, int, int]:
+    """
+    Read uploaded .sql / .txt file.
+    Returns: (raw_text, char_count, table_count)
+    """
+    raw = uploaded_file.read().decode("utf-8", errors="replace")
+    # Estimate table count by counting CREATE TABLE occurrences
+    table_count = len(re.findall(r'\bCREATE\s+TABLE\b', raw, re.IGNORECASE))
+    return raw, len(raw), table_count
+
+
 def build_system_prompt(dialect: str, style: str) -> str:
     style_instructions = {
-        "Standard": "Use standard, clean SQL formatting with uppercase keywords.",
-        "Compact":  "Return compact SQL without extra newlines, suitable for inline use.",
+        "Standard":  "Use standard, clean SQL formatting with uppercase keywords.",
+        "Compact":   "Return compact SQL without extra newlines, suitable for inline use.",
         "Annotated": "Add brief SQL comments above each major clause explaining what it does.",
     }
     return f"""You are QueryPulse AI, an expert SQL engineer specialising in {dialect}.
@@ -499,48 +621,182 @@ RULES:
 5. Handle NULL values safely with COALESCE or IS NULL checks where appropriate.
 6. For analytical queries, use window functions instead of subqueries when possible.
 7. Always end the query with a semicolon.
-8. If the request is ambiguous, make the most reasonable assumption and proceed — do NOT ask for clarification.
-9. If the request cannot be converted to SQL (e.g. it is totally unrelated), reply with exactly: ERROR: Not a valid SQL request.
+8. If the request is ambiguous, make the most reasonable assumption and proceed.
+9. If the request cannot be converted to SQL, reply with exactly: ERROR: Not a valid SQL request.
 
 Dialect-specific notes:
-- PostgreSQL: Use ILIKE for case-insensitive search, EXTRACT() for dates, $1/$2 for parameterised queries.
-- MySQL: Use LIKE for strings, DATE_FORMAT(), IFNULL().
-- SQLite: Minimalist functions; use strftime() for dates.
-- SQL Server (T-SQL): Use TOP instead of LIMIT, GETDATE() for current timestamp, square bracket identifiers.
-- BigQuery: Use backtick identifiers, SAFE_DIVIDE(), TIMESTAMP functions, ARRAY/STRUCT types if needed.
-- Snowflake: Use QUALIFY for window-filtered rows, IFF() for inline conditionals, FLATTEN for semi-structured data.
+- PostgreSQL: ILIKE for case-insensitive search, EXTRACT() for dates.
+- MySQL: DATE_FORMAT(), IFNULL().
+- SQLite: strftime() for dates.
+- SQL Server (T-SQL): TOP instead of LIMIT, GETDATE(), square bracket identifiers.
+- BigQuery: backtick identifiers, SAFE_DIVIDE(), ARRAY/STRUCT if needed.
+- Snowflake: QUALIFY for window-filtered rows, IFF(), FLATTEN for semi-structured data.
 """
 
 
-def generate_sql(prompt: str, api_key: str, dialect: str, style: str, model: str) -> dict:
+def build_user_message(prompt: str, schema_text: str | None) -> str:
+    """
+    If a schema is loaded, prepend it as context and add strict column constraints.
+    """
+    if not schema_text:
+        return prompt.strip()
+
+    return f"""=== DATABASE SCHEMA ===
+The following is the exact schema of the target database.
+You MUST use ONLY the table names and column names defined here.
+Do NOT invent, guess, or hallucinate any table or column that is not listed below.
+
+{schema_text.strip()}
+
+=== END OF SCHEMA ===
+
+Now generate a {{}}-dialect SQL query for the following request.
+Use exclusively the tables and columns from the schema above.
+
+REQUEST: {prompt.strip()}"""
+
+
+def generate_sql(
+    prompt: str,
+    api_key: str,
+    dialect: str,
+    style: str,
+    model: str,
+    schema_text: str | None = None,
+) -> dict:
     """Call OpenAI and return {sql, tokens, elapsed}."""
-    client = openai.OpenAI(api_key=api_key)
-    start = time.time()
+    client  = openai.OpenAI(api_key=api_key)
+    start   = time.time()
+    user_msg = build_user_message(prompt, schema_text)
 
     response = client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": build_system_prompt(dialect, style)},
-            {"role": "user",   "content": prompt.strip()},
+            {"role": "user",   "content": user_msg},
         ],
         temperature=0.2,
-        max_tokens=1200,
+        max_tokens=1400,
     )
 
     elapsed = round(time.time() - start, 2)
     sql     = response.choices[0].message.content.strip()
     tokens  = response.usage.total_tokens
-
     return {"sql": sql, "tokens": tokens, "elapsed": elapsed}
 
 
 def validate_result(sql: str) -> tuple[bool, str]:
-    """Basic sanity checks on the returned SQL."""
     if sql.startswith("ERROR:"):
         return False, sql.replace("ERROR:", "").strip()
     if len(sql) < 10:
         return False, "Model returned an unexpectedly short response."
     return True, ""
+
+
+# ═════════════════════════════════════════════
+# SIDEBAR — Schema Uploader
+# ═════════════════════════════════════════════
+with st.sidebar:
+    st.markdown("""
+    <div class="sb-header">
+        <span class="sb-header-icon">🗄️</span>
+        <span class="sb-header-title">Schema Context</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<p class="sb-label">📂 Upload schema file</p>', unsafe_allow_html=True)
+
+    uploaded_file = st.file_uploader(
+        "schema_upload",
+        type=["sql", "txt"],
+        accept_multiple_files=False,
+        label_visibility="collapsed",
+        help="Upload a .sql or .txt file containing your CREATE TABLE definitions.",
+    )
+
+    schema_text: str | None = None
+    schema_meta: dict       = {}
+
+    if uploaded_file is not None:
+        try:
+            raw, char_count, table_count = parse_schema_file(uploaded_file)
+
+            # Guard: file too large (>80 KB is risky for context window)
+            if char_count > 80_000:
+                st.markdown("""
+                <div class="qp-alert qp-alert-warn" style="font-size:.7rem;padding:.7rem .9rem;">
+                    <span>⚠</span>
+                    <span>Schema file exceeds 80 KB. Please trim unused tables to stay within context limits.</span>
+                </div>""", unsafe_allow_html=True)
+            else:
+                schema_text = raw
+                schema_meta = {
+                    "name":   uploaded_file.name,
+                    "tables": table_count,
+                    "chars":  char_count,
+                }
+
+                # Preview card
+                preview = raw[:900] + ("\n…" if len(raw) > 900 else "")
+                st.markdown(f"""
+                <div class="schema-card">
+                    <pre>{preview}</pre>
+                </div>
+                <div class="schema-status">
+                    <span class="dot-green"></span>
+                    {table_count} table{'s' if table_count != 1 else ''} · {char_count:,} chars
+                </div>
+                """, unsafe_allow_html=True)
+
+        except Exception as e:
+            st.markdown(f"""
+            <div class="qp-alert qp-alert-error" style="font-size:.7rem;padding:.7rem .9rem;">
+                <span>✖</span>
+                <span>Could not read file: {e}</span>
+            </div>""", unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <p class="schema-inactive">
+            No schema loaded.<br>
+            AI will use general knowledge<br>
+            to infer table structures.
+        </p>
+        """, unsafe_allow_html=True)
+
+    st.markdown('<div class="sb-divider"></div>', unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="sb-tip">
+        💡 <strong>Tip:</strong> Export your schema with<br>
+        <code>pg_dump --schema-only</code> (PostgreSQL)<br>
+        or <code>SHOW CREATE TABLE</code> (MySQL) and paste into a .sql file.
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────
+# API KEY — secrets only
+# ─────────────────────────────────────────────
+resolved_api_key = st.secrets.get("OPENAI_API_KEY", "")
+
+if not resolved_api_key:
+    st.markdown("""
+    <div class="qp-alert qp-alert-missing-key">
+        <span class="qp-alert-icon">🔐</span>
+        <div>
+            <strong>API anahtarı bulunamadı.</strong><br>
+            <span style="font-size:0.78rem;opacity:.8;">
+                Projenizin <code>.streamlit/secrets.toml</code> dosyasına şu satırı ekleyin
+                ve uygulamayı yeniden başlatın:
+            </span>
+            <pre>OPENAI_API_KEY = "sk-..."</pre>
+            <span style="font-size:0.72rem;opacity:.6;">
+                Streamlit Cloud kullanıyorsanız → App Settings › Secrets bölümüne ekleyin.
+            </span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
 
 
 # ─────────────────────────────────────────────
@@ -571,42 +827,18 @@ with col1:
         ["PostgreSQL", "MySQL", "SQLite", "SQL Server (T-SQL)", "BigQuery", "Snowflake"],
         key="dialect_select",
     )
-
 with col2:
     style = st.selectbox(
         "style",
         ["Standard", "Annotated", "Compact"],
         key="style_select",
     )
-
 with col3:
     model = st.selectbox(
         "model",
         ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
         key="model_select",
     )
-
-# ── API Key: secrets only, never exposed in UI ──
-resolved_api_key = st.secrets.get("OPENAI_API_KEY", "")
-
-if not resolved_api_key:
-    st.markdown("""
-    <div class="qp-alert qp-alert-missing-key">
-        <span class="qp-alert-icon">🔐</span>
-        <div>
-            <strong>API anahtarı bulunamadı.</strong><br>
-            <span style="font-size:0.78rem;opacity:.8;">
-                Projenizin <code>.streamlit/secrets.toml</code> dosyasına şu satırı ekleyin
-                ve uygulamayı yeniden başlatın:
-            </span>
-            <pre style="margin:.6rem 0 0;font-size:.75rem;color:#ffd166;">OPENAI_API_KEY = "sk-..."</pre>
-            <span style="font-size:0.72rem;opacity:.6;">
-                Streamlit Cloud kullanıyorsanız → App Settings › Secrets bölümüne ekleyin.
-            </span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
 
 st.markdown('<div class="qp-divider"></div>', unsafe_allow_html=True)
 
@@ -633,18 +865,36 @@ with st.expander("✦  Quick examples — click to load", expanded=False):
 
 
 # ─────────────────────────────────────────────
+# SCHEMA MODE BADGE (only when schema loaded)
+# ─────────────────────────────────────────────
+if schema_text:
+    st.markdown(f"""
+    <div class="schema-mode-badge">
+        <span class="dot-g"></span>
+        Schema-Aware Mode · {schema_meta['name']} · {schema_meta['tables']} table{'s' if schema_meta['tables'] != 1 else ''}
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────
 # PROMPT INPUT
 # ─────────────────────────────────────────────
 st.markdown('<p class="qp-label">✦ Natural Language Prompt</p>', unsafe_allow_html=True)
+
+placeholder_with = (
+    "e.g. → List all users who signed up last month but haven't placed an order yet.\n"
+    "       AI will use only the columns defined in your uploaded schema."
+)
+placeholder_without = (
+    "e.g. → List all users who signed up last month but haven't made a purchase yet,\n"
+    "       grouped by their referral source and sorted by sign-up date…"
+)
 
 prompt = st.text_area(
     "prompt",
     value=st.session_state.last_prompt,
     height=110,
-    placeholder=(
-        "e.g. → List all users who signed up last month but haven't made a purchase yet,\n"
-        "       grouped by their referral source and sorted by sign-up date…"
-    ),
+    placeholder=placeholder_with if schema_text else placeholder_without,
     key="prompt_input",
 )
 
@@ -655,7 +905,6 @@ generate_clicked = st.button("⚡  Generate SQL", use_container_width=True)
 # GENERATE LOGIC
 # ─────────────────────────────────────────────
 if generate_clicked:
-    # ── Input guards ──────────────────────────
     if not prompt.strip():
         st.markdown("""
         <div class="qp-alert qp-alert-warn">
@@ -664,8 +913,9 @@ if generate_clicked:
         </div>""", unsafe_allow_html=True)
         st.stop()
 
-    # ── Call API ──────────────────────────────
-    with st.spinner("Generating SQL…"):
+    spinner_msg = "Generating schema-aware SQL…" if schema_text else "Generating SQL…"
+
+    with st.spinner(spinner_msg):
         try:
             result = generate_sql(
                 prompt=prompt,
@@ -673,31 +923,29 @@ if generate_clicked:
                 dialect=dialect,
                 style=style,
                 model=model,
+                schema_text=schema_text,   # None → general mode
             )
         except openai.AuthenticationError:
             st.markdown("""
             <div class="qp-alert qp-alert-error">
                 <span class="qp-alert-icon">✖</span>
-                <span><strong>Authentication failed.</strong> Your API key was rejected by OpenAI. Please check that it is valid and active.</span>
+                <span><strong>Authentication failed.</strong> Your API key was rejected by OpenAI.</span>
             </div>""", unsafe_allow_html=True)
             st.stop()
-
         except openai.RateLimitError:
             st.markdown("""
             <div class="qp-alert qp-alert-error">
                 <span class="qp-alert-icon">✖</span>
-                <span><strong>Rate limit exceeded.</strong> Your OpenAI quota has been reached. Try again shortly or upgrade your plan.</span>
+                <span><strong>Rate limit exceeded.</strong> Try again shortly or upgrade your plan.</span>
             </div>""", unsafe_allow_html=True)
             st.stop()
-
         except openai.APIConnectionError:
             st.markdown("""
             <div class="qp-alert qp-alert-error">
                 <span class="qp-alert-icon">✖</span>
-                <span><strong>Connection error.</strong> Could not reach the OpenAI API. Check your internet connection and try again.</span>
+                <span><strong>Connection error.</strong> Could not reach the OpenAI API.</span>
             </div>""", unsafe_allow_html=True)
             st.stop()
-
         except openai.BadRequestError as e:
             st.markdown(f"""
             <div class="qp-alert qp-alert-error">
@@ -705,7 +953,6 @@ if generate_clicked:
                 <span><strong>Bad request.</strong> {str(e)}</span>
             </div>""", unsafe_allow_html=True)
             st.stop()
-
         except Exception as e:
             st.markdown(f"""
             <div class="qp-alert qp-alert-error">
@@ -714,7 +961,6 @@ if generate_clicked:
             </div>""", unsafe_allow_html=True)
             st.stop()
 
-    # ── Validate ──────────────────────────────
     ok, err_msg = validate_result(result["sql"])
     if not ok:
         st.markdown(f"""
@@ -724,25 +970,28 @@ if generate_clicked:
         </div>""", unsafe_allow_html=True)
         st.stop()
 
-    # ── Success: store + render ───────────────
+    # ── Store in history ──
     st.session_state.query_count  += 1
     st.session_state.total_tokens += result["tokens"]
-
-    import datetime
     st.session_state.history.insert(0, {
-        "prompt":  prompt,
-        "sql":     result["sql"],
-        "dialect": dialect,
-        "ts":      datetime.datetime.now().strftime("%H:%M:%S"),
-        "tokens":  result["tokens"],
+        "prompt":      prompt,
+        "sql":         result["sql"],
+        "dialect":     dialect,
+        "ts":          datetime.datetime.now().strftime("%H:%M:%S"),
+        "tokens":      result["tokens"],
+        "schema_name": schema_meta.get("name", "—") if schema_text else "—",
     })
-
-    # Keep last 20 entries
     st.session_state.history = st.session_state.history[:20]
 
-    # ── Output Section ────────────────────────
+    # ── Output ──
     st.markdown('<div style="height:1rem"></div>', unsafe_allow_html=True)
     st.markdown('<p class="qp-label">✦ Generated SQL</p>', unsafe_allow_html=True)
+
+    schema_badge = (
+        f'<span class="sql-badge" style="color:var(--green);">'
+        f'<span class="dot"></span>{schema_meta["name"]}</span>'
+        if schema_text else ""
+    )
 
     highlighted = highlight_sql(result["sql"])
     st.markdown(f"""
@@ -753,15 +1002,16 @@ if generate_clicked:
                 <span class="dot"></span>
                 {dialect}
             </span>
-            <span class="sql-badge">{result['elapsed']}s · {result['tokens']} tokens</span>
+            <div style="display:flex;gap:1rem;align-items:center;">
+                {schema_badge}
+                <span class="sql-badge">{result['elapsed']}s · {result['tokens']} tokens</span>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Copy button (native Streamlit)
     st.code(result["sql"], language="sql")
 
-    # Stats chips
     st.markdown(f"""
     <div class="stats-row">
         <div class="stat-chip">
@@ -787,18 +1037,19 @@ if st.session_state.history:
     st.markdown('<div class="qp-divider"></div>', unsafe_allow_html=True)
     with st.expander(f"🕑  Query History  ({len(st.session_state.history)} entries)", expanded=False):
         for entry in st.session_state.history:
+            schema_tag = f" · 🗄 {entry['schema_name']}" if entry.get("schema_name") and entry["schema_name"] != "—" else ""
             st.markdown(f"""
             <div class="history-item">
                 <div class="hi-prompt">{entry['prompt']}</div>
-                <div class="hi-meta">{entry['ts']} · {entry['dialect']} · {entry['tokens']} tokens</div>
+                <div class="hi-meta">{entry['ts']} · {entry['dialect']}{schema_tag} · {entry['tokens']} tokens</div>
             </div>
             """, unsafe_allow_html=True)
             st.code(entry["sql"], language="sql")
 
         if st.button("🗑  Clear History", key="clear_history"):
-            st.session_state.history     = []
-            st.session_state.query_count = 0
-            st.session_state.total_tokens= 0
+            st.session_state.history      = []
+            st.session_state.query_count  = 0
+            st.session_state.total_tokens = 0
             st.rerun()
 
 
