@@ -112,14 +112,28 @@ section.main > div,
   font-size: .72rem; font-weight: 700; color: var(--navy-dk);
   letter-spacing: 1.5px; text-transform: uppercase;
   display: flex; align-items: center; gap: 7px;
-  margin-bottom: .85rem;
+  margin-bottom: .55rem;
 }
 .upload-card-title::before { content:""; width:3px; height:13px; background:var(--yel); border-radius:2px; flex-shrink:0; }
 
-.schema-ok { display:flex; align-items:center; gap:7px; margin-top:.7rem; font-size:.70rem; font-weight:600; color:var(--ok); }
+/* help text */
+.upload-help {
+  font-size: .72rem; color: var(--muted); line-height: 1.6;
+  padding: .45rem .7rem;
+  background: rgba(255,255,255,.55);
+  border-radius: var(--rad-s);
+  border-left: 2px solid rgba(0,71,186,.22);
+  margin-top: .5rem;
+}
+.upload-help code { background:rgba(0,71,186,.08); color:var(--navy); padding:1px 5px; border-radius:4px; font-family:var(--mono); font-size:.69rem; }
+
+.schema-ok { display:flex; align-items:center; gap:7px; margin-top:.5rem; font-size:.70rem; font-weight:600; color:var(--ok); }
 .schema-ok .dot { width:7px; height:7px; border-radius:50%; background:var(--ok); flex-shrink:0; }
-.schema-prev { background:#fff; border:1px solid var(--brd); border-left:3px solid var(--yel); border-radius:var(--rad-s); padding:.65rem .85rem; margin-top:.65rem; max-height:160px; overflow-y:auto; }
-.schema-prev pre { font-family:var(--mono) !important; font-size:.63rem !important; line-height:1.7 !important; color:var(--text) !important; margin:0 !important; white-space:pre-wrap !important; word-break:break-word !important; }
+
+/* table chips */
+.tbl-row { display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.4rem; }
+.tbl-chip { display:inline-flex; align-items:center; gap:3px; background:rgba(0,71,186,.08); border:1px solid rgba(0,71,186,.18); border-radius:20px; padding:2px 9px; font-family:var(--mono); font-size:.65rem; font-weight:500; color:var(--navy-dk); }
+.tbl-more { background:rgba(160,174,192,.14); border:1px solid var(--brd); border-radius:20px; padding:2px 9px; font-size:.65rem; color:var(--muted); }
 
 /* ══════════════ SECTION LABELS ════════════════════════════════════════════ */
 .lbl { font-size:.63rem; font-weight:700; color:var(--navy-dk); letter-spacing:1.8px; text-transform:uppercase; margin-bottom:.55rem; display:flex; align-items:center; gap:7px; }
@@ -396,7 +410,6 @@ uf = st.file_uploader(
     type=["sql", "txt"],
     accept_multiple_files=False,
     label_visibility="collapsed",
-    help="Upload a .sql or .txt file containing CREATE TABLE statements.",
 )
 
 schema_text, schema_meta = None, {}
@@ -413,16 +426,34 @@ if uf:
         else:
             schema_text = raw
             schema_meta = {"name": uf.name, "tables": tables, "chars": chars}
-            prev = raw[:600] + ("\n…" if len(raw) > 600 else "")
+
+            # ── schema loaded: status + table chip list ──
+            tbl_names = re.findall(r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?\W*(\w+)', raw, re.I)
+            MAX_SHOW  = 12
+            chips = "".join(f'<span class="tbl-chip">⬡ {t}</span>' for t in tbl_names[:MAX_SHOW])
+            if len(tbl_names) > MAX_SHOW:
+                chips += f'<span class="tbl-more">+{len(tbl_names)-MAX_SHOW} more</span>'
+
             st.markdown(
                 f'<div class="schema-ok"><span class="dot"></span>'
-                f'<strong>{uf.name}</strong> loaded — {tables} tables · {chars:,} chars</div>'
-                f'<div class="schema-prev"><pre>{prev}</pre></div>',
+                f'<strong>{uf.name}</strong> — {tables} tables · {chars:,} chars</div>'
+                + (f'<div class="tbl-row">{chips}</div>' if chips else ""),
                 unsafe_allow_html=True,
             )
     except Exception as e:
         st.markdown(mk_alert("❌", "File Error", f"Could not read: {e}"), unsafe_allow_html=True)
-else:
+
+# ── help text (always visible below uploader) ──
+st.markdown(
+    '<div class="upload-help">'
+    '💡 <strong>Tip:</strong> Export your schema with '
+    '<code>pg_dump --schema-only</code> (PostgreSQL) or '
+    '<code>SHOW CREATE TABLE</code> (MySQL) and save as a <code>.sql</code> file.'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+if not uf:
     st.markdown(
         mk_alert("ℹ️", "No Schema — Using General Knowledge",
                  "AI will infer table/column names from your description. "
