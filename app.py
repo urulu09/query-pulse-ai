@@ -1234,25 +1234,26 @@ if go:
     sql_esc = res["sql"].replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")\
                         .replace('"',"&quot;").replace("'","&#39;")
 
-    st.markdown(
-    f'<div class="sql-card">'
-    f'<pre>{hl(res["sql"])}</pre>'
-    f'<div class="sql-bar">'
-    f'<span class="sql-tag"><span class="dot"></span>{dialect}</span>'
-    f'<div style="display:flex;gap:.45rem;align-items:center;">{sb}'
-    + clipboard_js(sql_esc) +
-    f'<span class="sql-tag">{res["elapsed"]}s · {res["tokens"]} tok</span>'
-    f'</div></div></div>',
-    unsafe_allow_html=True   # ✅ BURADA, VİRGÜLLE AYNI ÇAĞRININ İÇİNDE
-)
+     st.markdown(
+        f'<div class="sql-card">'
+        f'<pre>{hl(res["sql"])}</pre>'
+        f'<div class="sql-bar">'
+        f'<span class="sql-tag"><span class="dot"></span>{dialect}</span>'
+        f'<div style="display:flex;gap:.45rem;align-items:center;">{sb}'
+        + clipboard_js(sql_esc) +
+        f'<span class="sql-tag">{res["elapsed"]}s · {res["tokens"]} tok</span>'
+        f'</div></div></div>',
+        unsafe_allow_html=True
+    )
 
+    # ✅ BURASI
+    render_risk_score(res["sql"])
 
-render_risk_score(res["sql"])
     col_code, col_dl = st.columns([4, 1])
     with col_code:
         st.code(res["sql"], language="sql")
     with col_dl:
-        st.markdown(dl(res["sql"]) 
+        st.markdown(dl(res["sql"]), unsafe_allow_html=True)
 
     # ── REVIEW CARD ──────────────────────────────────────────────────────
     review = res.get("review", {})
