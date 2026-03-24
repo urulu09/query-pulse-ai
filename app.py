@@ -243,6 +243,34 @@ div[data-testid="stCopyButton"] button:hover { background:#89DCEB !important; co
 .stSpinner > div { border-top-color:var(--navy) !important; }
 .pdiv { height:1px; background:var(--brd); margin:1rem 0; opacity:.4; }
 
+/* ══════════════ REVIEW CARD ════════════════════════════════════════════ */
+.review-card {
+  background: #fff; border: 1px solid var(--brd);
+  border-radius: var(--rad); padding: 1rem 1.3rem;
+  margin-top: .7rem; box-shadow: 0 2px 12px rgba(0,0,0,.04);
+}
+.review-grid { display:grid; grid-template-columns:1fr 1fr; gap:.7rem; margin-top:.55rem; }
+.review-col-title { font-size:.60rem; font-weight:700; color:var(--muted); letter-spacing:1.4px; text-transform:uppercase; margin-bottom:.35rem; }
+.review-col ul { margin:0; padding:0; list-style:none; }
+.review-col ul li { font-size:.77rem; color:var(--text); line-height:1.6; margin-bottom:.22rem; padding-left:.9rem; position:relative; }
+.review-col ul li::before { content:"▸"; position:absolute; left:0; color:var(--navy); font-size:.65rem; top:.10rem; }
+.review-col.issues ul li::before { color:#D69E2E; }
+.review-col.notes  ul li::before { color:var(--navy); }
+.status-safe   { display:inline-flex; align-items:center; gap:5px; background:#F0FFF4; border:1px solid #C6F6D5; border-radius:20px; padding:2px 11px; font-size:.67rem; font-weight:700; color:#276749; }
+.status-risky  { display:inline-flex; align-items:center; gap:5px; background:#FFFBEB; border:1px solid #FAF089; border-radius:20px; padding:2px 11px; font-size:.67rem; font-weight:700; color:#744210; }
+.status-invalid{ display:inline-flex; align-items:center; gap:5px; background:#FFF5F5; border:1px solid #FED7D7; border-radius:20px; padding:2px 11px; font-size:.67rem; font-weight:700; color:#9B2C2C; }
+.intent-card {
+  background: var(--navy-lt); border: 1px solid rgba(0,71,186,.18);
+  border-radius: var(--rad); padding: .85rem 1.1rem; margin-top: .5rem;
+}
+.intent-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:.55rem; margin-top:.4rem; }
+.intent-item { background:#fff; border:1px solid var(--brd); border-radius:var(--rad-s); padding:.5rem .7rem; }
+.intent-item-label { font-size:.57rem; font-weight:700; color:var(--muted); letter-spacing:1.2px; text-transform:uppercase; margin-bottom:.22rem; }
+.intent-item-val { font-size:.75rem; color:var(--text); line-height:1.5; }
+.intent-item-val .tag { display:inline-block; background:rgba(0,71,186,.08); border-radius:10px; padding:1px 7px; font-size:.65rem; color:var(--navy-dk); margin:.1rem .15rem .1rem 0; }
+.intent-item-val .tag-warn { background:rgba(214,158,46,.10); color:#744210; }
+.intent-summary { font-size:.80rem; color:var(--navy-dk); font-weight:500; line-height:1.55; }
+
 /* ══════════════ FOOTER ══════════════════════════════════════════════════ */
 .foot {
   text-align: center;
@@ -288,51 +316,180 @@ def parse_schema(f):
 def extract_tables(raw):
     return re.findall(r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?\W*(\w+)", raw, re.I)
 
-def sys_prompt(dialect, style):
-    sm = {"Standard":"Uppercase keywords, clean multi-line formatting.",
-          "Compact":"Compact, minimal whitespace.",
-          "Annotated":"Add a brief comment above each major clause."}
-    return (f"You are TURKCELL SQL AI, expert in {dialect}.\n"
-            f"Output ONLY valid {dialect} SQL — no markdown fences, no prose.\n"
-            f"{sm.get(style,'')} Use CTEs for complex queries. End with semicolon.\n"
-            f"If not a valid SQL request reply exactly: ERROR: Not a valid SQL request.")
+# ── SYSTEM PROMPT ─────────────────────────────────────────────────────────────
+PIPELINE_SYSTEM = """You are TURKCELL SQL AI.
+You are a production-grade, enterprise SQL assistant designed to help non-technical users generate SAFE, READ-ONLY SQL queries.
+Your behavior must follow a strict multi-step reasoning pipeline.
+You MUST follow all steps in order. You MUST NOT skip steps. You MUST NOT explain your internal reasoning.
 
-def explain_prompt(sql, dialect):
-    return (
-        f"Aşağıdaki {dialect} SQL sorgusunu kısa ve anlaşılır Türkçe ile açıkla.\n"
-        f"Yanıtını SADECE madde madde (bullet list) ver, her madde '•' ile başlasın.\n"
-        f"Hangi tabloların kullanıldığını, hangi filtrelerin uygulandığını, "
-        f"hangi sütunların döndürüldüğünü ve varsa gruplama/sıralama işlemlerini belirt.\n"
-        f"Toplam 4-6 madde yaz, markdown kullanma, sadece düz metin.\n\n"
-        f"SQL:\n{sql}"
-    )
+========================
+GLOBAL RULES (VERY IMPORTANT)
+========================
+- You can generate ONLY SELECT queries
+- NEVER generate INSERT, UPDATE, DELETE, DROP, TRUNCATE, ALTER
+- NEVER invent tables or columns
+- Use ONLY the provided database schema
+- If something is unclear, do NOT guess silently
+- Prefer correctness over completeness
+- Assume this is a corporate production environment
+If the user intent implies data modification, politely refuse.
 
-def user_msg(prompt, schema):
-    if not schema: return prompt.strip()
-    return (f"=== SCHEMA ===\n{schema.strip()}\n=== END ===\n"
-            f"Use ONLY these tables/columns.\nREQUEST: {prompt.strip()}")
+========================
+STEP 1 – INTENT ANALYSIS
+========================
+Analyze the user's natural language request.
+Your task:
+- Understand what the user wants from a business perspective
+- Extract time range, filters, entities, and metrics
+- Identify assumptions and missing information
+- DO NOT generate SQL in this step
+Output MUST be valid JSON in the following format:
+{
+  "intent_summary": "",
+  "time_range": "",
+  "filters": [],
+  "entities": [],
+  "metrics": [],
+  "grouping": [],
+  "assumptions": [],
+  "missing_info": []
+}
 
-def run_sql(prompt, key, dialect, style, model, schema=None):
+========================
+STEP 2 – SQL GENERATION
+========================
+Using:
+- The structured intent from Step 1
+- The provided database schema
+- The selected SQL dialect
+Generate a SINGLE, READ-ONLY SQL query.
+Rules:
+- Use explicit JOINs
+- Avoid SELECT *
+- Use table aliases
+- Apply filters clearly
+- Keep the query readable and maintainable
+
+========================
+STEP 3 – SQL REVIEW (CRITIC)
+========================
+Review the generated SQL as a senior data engineer.
+Check for:
+- Invalid tables or columns
+- Missing or incorrect JOIN conditions
+- Cartesian joins
+- Performance risks (missing date filter, large scans)
+- Logical mismatches with the intent
+Output MUST be valid JSON in the following format:
+{
+  "status": "SAFE | RISKY | INVALID",
+  "issues": [],
+  "notes": []
+}
+
+========================
+FINAL OUTPUT FORMAT
+========================
+Return your response in THREE clearly separated sections:
+--- INTENT ---
+(Show the JSON from Step 1)
+--- SQL ---
+(Show the generated SQL query)
+--- REVIEW ---
+(Show the JSON from Step 3)
+Do NOT add any extra explanations. Do NOT add markdown. Do NOT add comments outside these sections."""
+
+
+def build_user_msg(prompt, dialect, style, schema):
+    style_note = {
+        "Standard":  "Use uppercase keywords and clean multi-line formatting.",
+        "Compact":   "Use compact, minimal whitespace.",
+        "Annotated": "Add a brief SQL comment above each major clause.",
+    }.get(style, "")
+
+    parts = [f"DIALECT: {dialect}", f"STYLE: {style_note}"]
+    if schema:
+        parts.append(f"DATABASE SCHEMA:\n{schema.strip()}")
+    parts.append(f"USER REQUEST: {prompt.strip()}")
+    return "\n\n".join(parts)
+
+
+def run_pipeline(prompt, key, dialect, style, model, schema=None):
+    """Single API call → returns {intent, sql, review, tokens, elapsed}."""
     t0 = time.time()
-    r = openai.OpenAI(api_key=key).chat.completions.create(
+    client = openai.OpenAI(api_key=key)
+    r = client.chat.completions.create(
         model=model,
-        messages=[{"role":"system","content":sys_prompt(dialect,style)},
-                  {"role":"user",  "content":user_msg(prompt,schema)}],
-        temperature=0.2, max_tokens=1400,
+        messages=[
+            {"role": "system", "content": PIPELINE_SYSTEM},
+            {"role": "user",   "content": build_user_msg(prompt, dialect, style, schema)},
+        ],
+        temperature=0.1,
+        max_tokens=2400,
     )
-    return {"sql":r.choices[0].message.content.strip(),
-            "tokens":r.usage.total_tokens, "elapsed":round(time.time()-t0,2)}
+    raw_out = r.choices[0].message.content.strip()
+    elapsed = round(time.time() - t0, 2)
+    tokens  = r.usage.total_tokens
+
+    # ── parse three sections ──────────────────────────────────────────────────
+    def extract(tag, text):
+        m = re.search(rf"---\s*{tag}\s*---(.+?)(?=---\s*\w|$)", text, re.S | re.I)
+        return m.group(1).strip() if m else ""
+
+    intent_raw = extract("INTENT", raw_out)
+    sql_raw    = extract("SQL",    raw_out)
+    review_raw = extract("REVIEW", raw_out)
+
+    # parse JSON blocks safely
+    def safe_json(text):
+        text = text.strip()
+        m = re.search(r"\{.*\}", text, re.S)
+        if m:
+            try: return json.loads(m.group(0))
+            except Exception: pass
+        return {}
+
+    intent = safe_json(intent_raw)
+    review = safe_json(review_raw)
+    sql    = sql_raw.strip()
+
+    # strip any stray fences from SQL block
+    sql = re.sub(r"^```[a-zA-Z]*\n?", "", sql).strip()
+    sql = re.sub(r"\n?```$", "", sql).strip()
+
+    return {
+        "sql":     sql,
+        "intent":  intent,
+        "review":  review,
+        "tokens":  tokens,
+        "elapsed": elapsed,
+        "raw":     raw_out,
+    }
+
 
 def run_explain(sql, key, dialect, model):
+    """Separate Turkish explanation call (non-critical)."""
+    explain_sys = (
+        f"Aşağıdaki {dialect} SQL sorgusunu kısa ve anlaşılır Türkçe ile açıkla.\n"
+        f"Yanıtını SADECE madde madde ver, her madde '•' ile başlasın.\n"
+        f"Hangi tabloların kullanıldığını, hangi filtrelerin uygulandığını, "
+        f"hangi sütunların döndürüldüğünü ve varsa gruplama/sıralama işlemlerini belirt.\n"
+        f"Toplam 4-6 madde yaz, markdown kullanma, sadece düz metin.\n\nSQL:\n{sql}"
+    )
     r = openai.OpenAI(api_key=key).chat.completions.create(
         model=model,
-        messages=[{"role":"user","content":explain_prompt(sql,dialect)}],
+        messages=[{"role": "user", "content": explain_sys}],
         temperature=0.3, max_tokens=400,
     )
     return r.choices[0].message.content.strip()
 
 def chk(sql):
-    if sql.startswith("ERROR:"): return False, sql[6:].strip()
+    if not sql or sql.upper().startswith("ERROR"):
+        return False, sql.replace("ERROR:", "").strip() if sql else "Model yanıt vermedi."
+    # block write ops
+    danger = re.compile(r"^\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b", re.I)
+    if danger.search(sql):
+        return False, "Güvenlik: Yalnızca SELECT sorguları üretilebilir. Yazma işlemi reddedildi."
     if len(sql) < 10: return False, "Model beklenmedik kısa yanıt döndürdü."
     return True, ""
 
@@ -490,48 +647,69 @@ if go:
             unsafe_allow_html=True)
         st.stop()
 
-    with st.spinner("SQL oluşturuluyor…"):
+    with st.spinner("Pipeline çalışıyor: Intent → SQL → Review…"):
         try:
-            res = run_sql(prompt, api_key, dialect, style, model, schema_text)
+            res = run_pipeline(prompt, api_key, dialect, style, model, schema_text)
         except openai.AuthenticationError:
-            st.markdown(mk_alert("🔑","Kimlik Hatası",
-                "API anahtarı reddedildi."),unsafe_allow_html=True); st.stop()
+            st.markdown(mk_alert("🔑","Kimlik Hatası","API anahtarı reddedildi."),
+                unsafe_allow_html=True); st.stop()
         except openai.RateLimitError:
-            st.markdown(mk_alert("⏱","Limit Aşıldı",
-                "OpenAI kotası doldu. Kısa süre bekleyip tekrar deneyin."),
+            st.markdown(mk_alert("⏱","Limit Aşıldı","OpenAI kotası doldu. Kısa süre bekleyip tekrar deneyin."),
                 unsafe_allow_html=True); st.stop()
         except openai.APIConnectionError:
-            st.markdown(mk_alert("🌐","Bağlantı Hatası",
-                "OpenAI API'ye ulaşılamadı."),unsafe_allow_html=True); st.stop()
+            st.markdown(mk_alert("🌐","Bağlantı Hatası","OpenAI API'ye ulaşılamadı."),
+                unsafe_allow_html=True); st.stop()
         except Exception as e:
-            st.markdown(mk_alert("⚙️","Beklenmeyen Hata",
-                f"Sorun oluştu:<br><code>{e}</code>"),
+            st.markdown(mk_alert("⚙️","Beklenmeyen Hata",f"Sorun oluştu:<br><code>{e}</code>"),
                 unsafe_allow_html=True); st.stop()
 
     valid, err = chk(res["sql"])
     if not valid:
-        st.markdown(mk_alert("⚠️","Model Bildirimi",err,"warn"),
+        st.markdown(mk_alert("⚠️","Güvenlik Reddi",err,"warn"),
             unsafe_allow_html=True); st.stop()
 
-    # store history
+    # ── store history ─────────────────────────────────────────────────────
     st.session_state.qc += 1
     st.session_state.tt += res["tokens"]
     st.session_state.history.insert(0,{
-        "prompt":prompt,"sql":res["sql"],"dialect":dialect,
-        "ts":datetime.datetime.now().strftime("%d %b %Y %H:%M"),
-        "tokens":res["tokens"],
-        "schema":schema_meta.get("name","—") if schema_text else "—",
+        "prompt": prompt, "sql": res["sql"], "dialect": dialect,
+        "ts":     datetime.datetime.now().strftime("%d %b %Y %H:%M"),
+        "tokens": res["tokens"],
+        "schema": schema_meta.get("name","—") if schema_text else "—",
     })
     st.session_state.history = st.session_state.history[:30]
 
-    # ── dark SQL card ─────────────────────────────────────────────────────
+    # ── INTENT CARD ──────────────────────────────────────────────────────
+    intent = res.get("intent", {})
+    if intent:
+        def tag_list(items, warn=False):
+            cls = "tag-warn" if warn else "tag"
+            if not items: return f'<span class="{cls}">—</span>'
+            return " ".join(f'<span class="{cls}">{i}</span>' for i in items if i)
+
+        st.markdown(
+            '<div class="intent-card">'
+            '<div class="exp-title">🎯 Intent Analizi</div>'
+            f'<div class="intent-summary">{intent.get("intent_summary","—")}</div>'
+            '<div class="intent-grid">'
+            f'<div class="intent-item"><div class="intent-item-label">Zaman Aralığı</div><div class="intent-item-val">{intent.get("time_range","—") or "—"}</div></div>'
+            f'<div class="intent-item"><div class="intent-item-label">Tablolar</div><div class="intent-item-val">{tag_list(intent.get("entities",[]))}</div></div>'
+            f'<div class="intent-item"><div class="intent-item-label">Metrikler</div><div class="intent-item-val">{tag_list(intent.get("metrics",[]))}</div></div>'
+            f'<div class="intent-item"><div class="intent-item-label">Filtreler</div><div class="intent-item-val">{tag_list(intent.get("filters",[]))}</div></div>'
+            f'<div class="intent-item"><div class="intent-item-label">Gruplama</div><div class="intent-item-val">{tag_list(intent.get("grouping",[]))}</div></div>'
+            f'<div class="intent-item"><div class="intent-item-label">Eksik Bilgi</div><div class="intent-item-val">{tag_list(intent.get("missing_info",[]), warn=True)}</div></div>'
+            '</div></div>',
+            unsafe_allow_html=True)
+
+    # ── SQL CARD (dark) ───────────────────────────────────────────────────
     sb = ""
     if schema_text:
         sb = ('<span class="sql-tag" style="background:rgba(166,227,161,.12);color:#A6E3A1;">' +
               '<span class="dot" style="background:#A6E3A1"></span>' +
               f'{schema_meta["name"]}</span>')
 
-    sql_esc = res["sql"].replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"','&quot;').replace("'","&#39;")
+    sql_esc = res["sql"].replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")\
+                        .replace('"',"&quot;").replace("'","&#39;")
 
     st.markdown(
         f'<div class="sql-card">'
@@ -544,14 +722,38 @@ if go:
         f'</div></div></div>',
         unsafe_allow_html=True)
 
-    # native copy button + download (secondary)
     col_code, col_dl = st.columns([4, 1])
     with col_code:
         st.code(res["sql"], language="sql")
     with col_dl:
         st.markdown(dl(res["sql"]), unsafe_allow_html=True)
 
-    # stats
+    # ── REVIEW CARD ──────────────────────────────────────────────────────
+    review = res.get("review", {})
+    if review:
+        status = review.get("status","SAFE").upper()
+        status_html = {
+            "SAFE":    '<span class="status-safe">✓ SAFE</span>',
+            "RISKY":   '<span class="status-risky">⚠ RISKY</span>',
+            "INVALID": '<span class="status-invalid">✗ INVALID</span>',
+        }.get(status, f'<span class="status-safe">{status}</span>')
+
+        issues = review.get("issues", [])
+        notes  = review.get("notes",  [])
+        issue_li = "".join(f"<li>{i}</li>" for i in issues) if issues else "<li>Sorun tespit edilmedi</li>"
+        notes_li = "".join(f"<li>{n}</li>" for n in notes)  if notes  else "<li>—</li>"
+
+        st.markdown(
+            '<div class="review-card">'
+            '<div class="exp-title">🔍 SQL İnceleme</div>'
+            f'<div style="margin:.3rem 0 .55rem">{status_html}</div>'
+            '<div class="review-grid">'
+            '<div class="review-col issues"><div class="review-col-title">Sorunlar</div><ul>' + issue_li + '</ul></div>'
+            '<div class="review-col notes"><div class="review-col-title">Notlar</div><ul>' + notes_li + '</ul></div>'
+            '</div></div>',
+            unsafe_allow_html=True)
+
+    # ── STATS ─────────────────────────────────────────────────────────────
     st.markdown(
         f'<div class="stats">'
         f'<div class="stat"><div class="v">{st.session_state.qc}</div><div class="l">Sorgular</div></div>'
@@ -560,28 +762,18 @@ if go:
         f'</div>',
         unsafe_allow_html=True)
 
-    # ── SQL EXPLANATION ───────────────────────────────────────────────────
-    st.markdown(
-        '<div class="exp-card">'
-        '<div class="exp-title">💡 Sorgu Açıklaması</div>'
-        '<p class="exp-loading">Türkçe açıklama oluşturuluyor…</p>'
-        '</div>',
-        unsafe_allow_html=True)
-
+    # ── EXPLANATION (Turkish, non-critical) ───────────────────────────────
     with st.spinner(""):
         try:
             explanation = run_explain(res["sql"], api_key, dialect, model)
-            lines = [l.strip().lstrip("•-* ").strip()
-                     for l in explanation.splitlines() if l.strip()]
+            lines   = [l.strip().lstrip("•-* ").strip() for l in explanation.splitlines() if l.strip()]
             bullets = "".join(f"<li>{l}</li>" for l in lines if l)
             st.markdown(
-                '<div class="exp-card">'
-                '<div class="exp-title">💡 Sorgu Açıklaması</div>'
-                f'<ul>{bullets}</ul>'
-                '</div>',
+                '<div class="exp-card"><div class="exp-title">💡 Sorgu Açıklaması</div>'
+                f'<ul>{bullets}</ul></div>',
                 unsafe_allow_html=True)
         except Exception:
-            pass   # explanation is non-critical, fail silently
+            pass
 
 
 # ══════════════════════════════════════════════════════════════════════════
