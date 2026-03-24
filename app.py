@@ -1019,7 +1019,7 @@ def dl(sql):
 enc = b64lib.b64encode(sql.encode()).decode()
     ts  = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     return (f'<div class="dl-wrap"><a href="data:file/sql;base64,{enc}" '
-            f'download="query_{ts}.sql">📥 Download SQL</a></div>') 
+            f'download="query_{ts}.sql">📥 Download SQL</a></div>')
     
 
 
