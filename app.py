@@ -988,38 +988,38 @@ def run_pipeline(prompt, key, dialect, style, model, schema=None):
         "raw":         raw_out,
     }
 
-
-def run_explain(sql, key, dialect, model):
-    """Separate Turkish explanation call (non-critical)."""
-    explain_sys = (
-        f"Aşağıdaki {dialect} SQL sorgusunu kısa ve anlaşılır Türkçe ile açıkla.\n"
-        f"Yanıtını SADECE madde madde ver, her madde '•' ile başlasın.\n"
-        f"Hangi tabloların kullanıldığını, hangi filtrelerin uygulandığını, "
-        f"hangi sütunların döndürüldüğünü ve varsa gruplama/sıralama işlemlerini belirt.\n"
-        f"Toplam 4-6 madde yaz, markdown kullanma, sadece düz metin.\n\nSQL:\n{sql}"
+def dl(sql):
+    enc = b64lib.b64encode(sql.encode()).decode()
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return (
+        f'<div class="dl-wrap"><a href="data:file/sql;base64,{enc}" '
+        f'download="query_{ts}.sql">📥 Download SQL</a></div>'
     )
-    r = openai.OpenAI(api_key=key).chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": explain_sys}],
-        temperature=0.3, max_tokens=400,
-    )
-    return r.choices[0].message.content.strip()
 
 def chk(sql):
     if not sql or sql.upper().startswith("ERROR"):
         return False, sql.replace("ERROR:", "").strip() if sql else "Model yanıt vermedi."
-    # block write ops
     danger = re.compile(r"^\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b", re.I)
     if danger.search(sql):
         return False, "Güvenlik: Yalnızca SELECT sorguları üretilebilir. Yazma işlemi reddedildi."
-    if len(sql) < 10: return False, "Model beklenmedik kısa yanıt döndürdü."
+    if len(sql) < 10:
+        return False, "Model beklenmedik kısa yanıt döndürdü."
     return True, ""
 
 def dl(sql):
-enc = b64lib.b64encode(sql.encode()).decode()
-    ts  = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    return (f'<div class="dl-wrap"><a href="data:file/sql;base64,{enc}" '
-            f'download="query_{ts}.sql">📥 Download SQL</a></div>')
+    enc = b64lib.b64encode(sql.encode()).decode()
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return (
+        f'<div class="dl-wrap"><a href="data:file/sql;base64,{enc}" '
+        f'download="query_{ts}.sql">📥 Download SQL</a></div>'
+    )
+
+def mk_alert(icon, title, body, v=""):
+    return (f'<div class="alert {v}"><div class="alert-h">'
+            f'<div class="alert-ic">{icon}</div>'
+            f'<div class="alert-title">{title}</div></div>'
+            f'<div class="alert-body">{body}</div></div>')
+    )
     
 
 
