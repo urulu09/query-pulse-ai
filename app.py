@@ -1,6 +1,5 @@
 """
-TURKCELL SQL AI — app.py  v4.0
-SQL Explanation · Clipboard · Compact cards · Table preview · Refined footer
+TURKCELL SQL AI — app.py  v4.1
 """
 import streamlit as st
 import openai
@@ -21,769 +20,179 @@ st.set_page_config(
 # ══════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-/* ════════════════════════════════════════════════════════════════════════
-   TURKCELL SQL AI — Enterprise SaaS UI
-   Brand: #003DA5 primary · #FFC72C accent · #F5F7FA background
-════════════════════════════════════════════════════════════════════════ */
-
-/* ── FONTS ─────────────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
-
-/* ── DESIGN TOKENS ──────────────────────────────────────────────────── */
 :root {
-  /* brand */
-  --b1:        #003DA5;   /* primary blue  */
-  --b2:        #0057D9;   /* secondary blue */
-  --b3:        #E8EFFE;   /* blue tint     */
-  --b4:        #F0F4FF;   /* lightest blue  */
-  --yellow:    #FFC72C;   /* accent yellow  */
-  --yel-dk:    #E6AE00;   /* hover yellow   */
-  --yel-lt:    #FFF9E6;   /* yellow tint    */
+  --b1:#003DA5;--b2:#0057D9;--b3:#E8EFFE;--b4:#F0F4FF;
+  --yellow:#FFC72C;--yel-dk:#E6AE00;--yel-lt:#FFF9E6;
+  --bg:#F5F7FA;--white:#FFFFFF;--text:#0F1623;--text-2:#3D4A5C;
+  --text-3:#6B7A90;--text-4:#9AA5B4;--border:#DCE3ED;--border-lt:#EEF2F7;
+  --ok:#0D7F4D;--ok-bg:#EDFAF3;--ok-brd:#A3DFBE;
+  --warn:#B45309;--warn-bg:#FFFBEB;--warn-brd:#FDE68A;
+  --err:#B91C1C;--err-bg:#FEF2F2;--err-brd:#FECACA;
+  --sh-sm:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --sh:0 4px 12px rgba(0,0,0,.07),0 1px 4px rgba(0,0,0,.04);
+  --sh-md:0 8px 24px rgba(0,0,0,.09),0 2px 6px rgba(0,0,0,.05);
+  --sh-blue:0 0 0 3px rgba(0,61,165,.14);
+  --r:10px;--r-sm:7px;--r-lg:14px;
+  --sans:'Inter',system-ui,sans-serif;
+  --mono:'JetBrains Mono','Roboto Mono',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;}
+html,body{background:var(--bg)!important;min-height:100vh;font-family:var(--sans)!important;color:var(--text);-webkit-font-smoothing:antialiased;}
+.stApp,.stApp>div,[data-testid="stAppViewContainer"],[data-testid="stAppViewBlockContainer"],section.main,section.main>div,.block-container{background:transparent!important;}
+#MainMenu,footer,header{visibility:hidden!important;}
+[data-testid="collapsedControl"]{display:none!important;}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+::-webkit-scrollbar-thumb:hover{background:var(--b2);}
+.block-container{max-width:1100px!important;padding:0 1.5rem 5rem!important;margin:0 auto!important;}
+div[data-testid="stVerticalBlock"]>div{margin-bottom:0!important;}
+div[data-testid="element-container"]{margin:0!important;padding:0!important;}
 
-  /* neutrals */
-  --bg:        #F5F7FA;   /* page bg       */
-  --white:     #FFFFFF;
-  --text:      #0F1623;   /* primary text   */
-  --text-2:    #3D4A5C;   /* secondary      */
-  --text-3:    #6B7A90;   /* muted          */
-  --text-4:    #9AA5B4;   /* disabled/hint  */
-  --border:    #DCE3ED;
-  --border-lt: #EEF2F7;
+.hdr{background:linear-gradient(100deg,#002A80 0%,var(--b1) 45%,var(--b2) 100%);margin:0 -1.5rem 1.8rem;padding:0 2.5rem;height:62px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 16px rgba(0,30,100,.22),0 1px 0 rgba(255,255,255,.06) inset;position:relative;overflow:hidden;}
+.hdr::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.30),transparent);}
+.hdr::after{content:"";position:absolute;right:-60px;top:-40px;width:280px;height:160px;background:radial-gradient(ellipse,rgba(255,199,44,.12),transparent 70%);pointer-events:none;}
+.hdr-left{display:flex;align-items:center;gap:14px;z-index:1;}
+.hdr-logo{height:34px;width:auto;display:block;background:rgba(255,255,255,.97);border-radius:7px;padding:3px 9px;box-shadow:0 1px 4px rgba(0,0,0,.12);}
+.hdr-vline{width:1px;height:22px;background:rgba(255,255,255,.22);flex-shrink:0;}
+.hdr-title{font-size:1.05rem;font-weight:800;color:#fff;letter-spacing:.3px;line-height:1.2;}
+.hdr-sub{font-size:.52rem;font-weight:500;color:rgba(255,255,255,.48);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+.hdr-pill{z-index:1;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:20px;padding:4px 14px;font-size:.58rem;font-weight:600;color:rgba(255,255,255,.80);letter-spacing:.9px;text-transform:uppercase;backdrop-filter:blur(4px);}
 
-  /* status */
-  --ok:        #0D7F4D;
-  --ok-bg:     #EDFAF3;
-  --ok-brd:    #A3DFBE;
-  --warn:      #B45309;
-  --warn-bg:   #FFFBEB;
-  --warn-brd:  #FDE68A;
-  --err:       #B91C1C;
-  --err-bg:    #FEF2F2;
-  --err-brd:   #FECACA;
+.card{background:var(--white);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--sh);padding:1.5rem 1.8rem 1.6rem;margin-bottom:.9rem;transition:box-shadow .2s;}
+.card:hover{box-shadow:var(--sh-md);}
+.upload-card{background:linear-gradient(135deg,#EEF3FF 0%,#E3ECFF 100%);border:1.5px dashed rgba(0,61,165,.24);border-radius:var(--r-lg);padding:1.1rem 1.6rem .9rem;margin-bottom:.9rem;transition:border-color .2s;}
+.upload-card:hover{border-color:var(--b1);}
+.card-sep{height:1px;background:var(--border-lt);margin:1.1rem -1.8rem;}
+.lbl{font-size:.65rem;font-weight:700;color:var(--b1);letter-spacing:1.6px;text-transform:uppercase;margin-bottom:.5rem;display:flex;align-items:center;gap:7px;}
+.lbl::before{content:"";width:3px;height:13px;background:var(--yellow);border-radius:2px;flex-shrink:0;}
+.upload-lbl{font-size:.68rem;font-weight:700;color:var(--b1);letter-spacing:1.4px;text-transform:uppercase;margin-bottom:.5rem;display:flex;align-items:center;gap:7px;}
+.upload-lbl::before{content:"";width:3px;height:13px;background:var(--yellow);border-radius:2px;flex-shrink:0;}
+.upload-help{font-size:.71rem;color:var(--text-3);line-height:1.65;padding:.45rem .75rem;background:rgba(255,255,255,.65);border-radius:var(--r-sm);border-left:2px solid rgba(0,61,165,.24);margin-top:.5rem;}
+.upload-help code{background:rgba(0,61,165,.08);color:var(--b1);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:.68rem;}
+.schema-ok{display:flex;align-items:center;gap:7px;margin-top:.5rem;font-size:.70rem;font-weight:600;color:var(--ok);}
+.schema-ok .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex-shrink:0;}
+.tbl-row{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.4rem;}
+.tbl-chip{background:rgba(0,61,165,.07);border:1px solid rgba(0,61,165,.16);border-radius:20px;padding:2px 10px;font-family:var(--mono);font-size:.63rem;font-weight:500;color:var(--b1);}
+.tbl-more{background:var(--border-lt);border:1px solid var(--border);border-radius:20px;padding:2px 10px;font-size:.63rem;color:var(--text-3);}
 
-  /* shadows */
-  --sh-sm:     0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
-  --sh:        0 4px 12px rgba(0,0,0,.07), 0 1px 4px rgba(0,0,0,.04);
-  --sh-md:     0 8px 24px rgba(0,0,0,.09), 0 2px 6px rgba(0,0,0,.05);
-  --sh-blue:   0 0 0 3px rgba(0,61,165,.14);
+[data-testid="stFileUploader"]{background:transparent!important;border:none!important;}
+[data-testid="stFileUploader"] label{display:none!important;}
+[data-testid="stFileUploaderDropzone"]{background:rgba(255,255,255,.75)!important;border:1.5px dashed rgba(0,61,165,.28)!important;border-radius:var(--r)!important;transition:border-color .2s,background .2s!important;}
+[data-testid="stFileUploaderDropzone"]:hover{border-color:var(--b1)!important;background:#fff!important;}
+[data-testid="stFileUploaderDropzoneInstructions"] span{color:var(--text-3)!important;font-size:.74rem!important;}
+[data-testid="stFileUploaderDropzone"] small{color:var(--text-4)!important;font-size:.61rem!important;}
 
-  /* spacing & shape */
-  --r:         10px;
-  --r-sm:      7px;
-  --r-lg:      14px;
-  --sans:      'Inter', system-ui, sans-serif;
-  --mono:      'JetBrains Mono', 'Roboto Mono', monospace;
-}
+.stSelectbox label{font-size:.62rem!important;font-weight:700!important;color:var(--text-3)!important;text-transform:uppercase!important;letter-spacing:.9px!important;}
+.stSelectbox>div>div{background:var(--white)!important;border:1.5px solid var(--border)!important;border-radius:var(--r-sm)!important;font-family:var(--sans)!important;font-size:.84rem!important;color:var(--text)!important;transition:border-color .18s,box-shadow .18s!important;}
+.stSelectbox>div>div:focus-within{border-color:var(--b1)!important;box-shadow:var(--sh-blue)!important;}
+div[data-baseweb="select"]*{background:#fff!important;color:var(--text)!important;}
+div[data-baseweb="popover"]*{background:#fff!important;border-color:var(--border)!important;color:var(--text)!important;}
 
-/* ── PAGE RESET ─────────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; }
+.stTextArea label{display:none!important;}
+.stTextArea textarea{background:var(--white)!important;border:1.5px solid var(--border)!important;border-radius:var(--r)!important;font-family:var(--sans)!important;font-size:.9rem!important;line-height:1.65!important;color:var(--text)!important;padding:12px 14px!important;resize:vertical!important;transition:border-color .18s,box-shadow .18s!important;box-shadow:var(--sh-sm)!important;}
+.stTextArea textarea:focus{border-color:var(--b1)!important;box-shadow:var(--sh-blue)!important;outline:none!important;}
+.stTextArea textarea::placeholder{color:var(--text-4)!important;}
 
-html, body {
-  background: var(--bg) !important;
-  min-height: 100vh;
-  font-family: var(--sans) !important;
-  color: var(--text);
-  -webkit-font-smoothing: antialiased;
-}
+.stButton>button{background:var(--yellow)!important;color:var(--b1)!important;font-family:var(--sans)!important;font-weight:700!important;font-size:.9rem!important;border:none!important;border-radius:var(--r-sm)!important;padding:.68rem 2.8rem!important;cursor:pointer!important;display:block!important;margin:.55rem auto 0!important;transition:background .15s,box-shadow .15s,transform .10s!important;box-shadow:0 4px 14px rgba(255,199,44,.38)!important;letter-spacing:.2px;}
+.stButton>button:hover{background:var(--yel-dk)!important;box-shadow:0 6px 20px rgba(255,199,44,.50)!important;transform:translateY(-1px)!important;}
+.stButton>button:active{transform:translateY(0)!important;box-shadow:0 2px 8px rgba(255,199,44,.28)!important;}
 
-/* kill every Streamlit background wrapper */
-.stApp,
-.stApp > div,
-[data-testid="stAppViewContainer"],
-[data-testid="stAppViewBlockContainer"],
-section.main,
-section.main > div,
-.block-container {
-  background: transparent !important;
-}
+.sql-card{background:#161B2A;border:1px solid #252E45;border-radius:var(--r-lg);padding:1.3rem 1.5rem 1rem;box-shadow:0 8px 30px rgba(0,0,0,.20),0 2px 8px rgba(0,0,0,.12);margin-top:.6rem;}
+.sql-card pre{font-family:var(--mono)!important;font-size:.80rem!important;line-height:1.82!important;color:#CDD6F4!important;margin:0!important;white-space:pre-wrap!important;word-break:break-word!important;}
+.kw{color:#89DCEB;font-weight:700;}.fn{color:#A6E3A1;}.str{color:#F38BA8;}.cmt{color:#45475A;font-style:italic;}.num{color:#CBA6F7;}
+.sql-bar{display:flex;align-items:center;justify-content:space-between;margin-top:.9rem;padding-top:.72rem;border-top:1px solid #252E45;}
+.sql-tag{display:inline-flex;align-items:center;gap:5px;background:rgba(137,220,235,.10);border:1px solid rgba(137,220,235,.22);border-radius:20px;padding:3px 11px;font-size:.61rem;font-weight:600;color:#89DCEB;}
+.sql-tag .dot{width:6px;height:6px;border-radius:50%;background:#A6E3A1;}
+.clip-btn{display:inline-flex;align-items:center;gap:5px;background:rgba(137,220,235,.10);border:1px solid rgba(137,220,235,.22);border-radius:var(--r-sm);padding:3px 12px;font-family:var(--sans);font-size:.68rem;font-weight:600;color:#89DCEB;cursor:pointer;transition:background .15s;}
+.clip-btn:hover{background:rgba(137,220,235,.22);}
+.clip-btn.copied{color:#A6E3A1;border-color:rgba(166,227,161,.35);}
+.dl-wrap{margin-top:.6rem;}
+.dl-wrap a{display:inline-flex;align-items:center;gap:5px;background:transparent;border:1.5px solid rgba(0,61,165,.30);border-radius:var(--r-sm);padding:.36rem .9rem;font-size:.72rem;font-weight:600;color:var(--b1);text-decoration:none;transition:background .15s,border-color .15s;}
+.dl-wrap a:hover{background:var(--b3);border-color:var(--b1);}
 
-#MainMenu, footer, header { visibility: hidden !important; }
-[data-testid="collapsedControl"] { display: none !important; }
+.status-safe{display:inline-flex;align-items:center;gap:6px;background:var(--ok-bg);border:1px solid var(--ok-brd);border-radius:20px;padding:3px 13px;font-size:.67rem;font-weight:700;color:var(--ok);}
+.status-safe::before{content:"●";font-size:.55rem;color:var(--ok);}
+.status-risky{display:inline-flex;align-items:center;gap:6px;background:var(--warn-bg);border:1px solid var(--warn-brd);border-radius:20px;padding:3px 13px;font-size:.67rem;font-weight:700;color:var(--warn);}
+.status-risky::before{content:"●";font-size:.55rem;color:var(--warn);}
+.status-invalid{display:inline-flex;align-items:center;gap:6px;background:var(--err-bg);border:1px solid var(--err-brd);border-radius:20px;padding:3px 13px;font-size:.67rem;font-weight:700;color:var(--err);}
+.status-invalid::before{content:"●";font-size:.55rem;color:var(--err);}
 
-/* scrollbar */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--b2); }
+.review-card{background:var(--white);border:1px solid var(--border);border-radius:var(--r-lg);padding:1.1rem 1.4rem;margin-top:.7rem;box-shadow:var(--sh);}
+.review-grid{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-top:.6rem;}
+.review-col-title{font-size:.60rem;font-weight:700;color:var(--text-3);letter-spacing:1.4px;text-transform:uppercase;margin-bottom:.35rem;}
+.review-col ul{margin:0;padding:0;list-style:none;}
+.review-col ul li{font-size:.78rem;color:var(--text-2);line-height:1.6;margin-bottom:.24rem;padding-left:1rem;position:relative;}
+.review-col ul li::before{content:"▸";position:absolute;left:0;color:var(--b1);font-size:.65rem;top:.10rem;}
+.review-col.issues ul li::before{color:var(--warn);}
+.review-col.notes ul li::before{color:var(--b2);}
 
-/* ── MAIN CONTAINER ─────────────────────────────────────────────────── */
-.block-container {
-  max-width: 1100px !important;
-  padding: 0 1.5rem 5rem !important;
-  margin: 0 auto !important;
-}
+.intent-card{background:var(--b4);border:1px solid rgba(0,61,165,.15);border-radius:var(--r-lg);padding:.95rem 1.2rem;margin-top:.6rem;}
+.intent-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-top:.5rem;}
+.intent-item{background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:.55rem .75rem;transition:box-shadow .15s;}
+.intent-item:hover{box-shadow:var(--sh-sm);}
+.intent-item-label{font-size:.57rem;font-weight:700;color:var(--text-3);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:.22rem;}
+.intent-item-val{font-size:.76rem;color:var(--text);line-height:1.5;}
+.intent-item-val .tag{display:inline-block;background:rgba(0,61,165,.08);border-radius:12px;padding:1px 8px;font-size:.64rem;color:var(--b1);margin:.1rem .12rem .1rem 0;}
+.intent-item-val .tag-warn{background:rgba(180,83,9,.09);color:var(--warn);}
+.intent-summary{font-size:.82rem;color:var(--b1);font-weight:500;line-height:1.55;}
 
-/* remove default streamlit element gaps */
-div[data-testid="stVerticalBlock"] > div { margin-bottom: 0 !important; }
-div[data-testid="element-container"] { margin: 0 !important; padding: 0 !important; }
+.exp-card{background:var(--white);border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:var(--r-lg);padding:1.1rem 1.4rem;margin-top:.7rem;box-shadow:var(--sh);}
+.exp-title{font-size:.65rem;font-weight:700;color:var(--b1);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:.55rem;display:flex;align-items:center;gap:7px;}
+.exp-title::before{content:"";width:3px;height:12px;background:var(--yellow);border-radius:2px;flex-shrink:0;}
+.exp-card ul{margin:.2rem 0 0 1rem;padding:0;list-style:none;}
+.exp-card ul li{font-size:.81rem;color:var(--text-2);line-height:1.65;margin-bottom:.28rem;padding-left:1rem;position:relative;}
+.exp-card ul li::before{content:"▸";position:absolute;left:0;color:var(--b2);font-size:.68rem;top:.10rem;}
 
-/* ════════════════════════════════════════════════════════════════════════
-   HEADER
-════════════════════════════════════════════════════════════════════════ */
-.hdr {
-  background: linear-gradient(100deg, #002A80 0%, var(--b1) 45%, var(--b2) 100%);
-  margin: 0 -1.5rem 1.8rem;
-  padding: 0 2.5rem;
-  height: 62px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  box-shadow: 0 2px 16px rgba(0,30,100,.22), 0 1px 0 rgba(255,255,255,.06) inset;
-  position: relative;
-  overflow: hidden;
-}
-/* decorative top shimmer */
-.hdr::before {
-  content: "";
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 1px;
-  background: linear-gradient(90deg,transparent,rgba(255,255,255,.30),transparent);
-}
-/* decorative right glow */
-.hdr::after {
-  content: "";
-  position: absolute;
-  right: -60px; top: -40px;
-  width: 280px; height: 160px;
-  background: radial-gradient(ellipse,rgba(255,199,44,.12),transparent 70%);
-  pointer-events: none;
-}
-.hdr-left  { display:flex; align-items:center; gap:14px; z-index:1; }
-.hdr-logo  {
-  height: 34px; width: auto; display: block;
-  background: rgba(255,255,255,.97);
-  border-radius: 7px;
-  padding: 3px 9px;
-  box-shadow: 0 1px 4px rgba(0,0,0,.12);
-}
-.hdr-vline { width:1px; height:22px; background:rgba(255,255,255,.22); flex-shrink:0; }
-.hdr-title {
-  font-size: 1.05rem; font-weight: 800;
-  color: #fff;
-  letter-spacing: .3px;
-  line-height: 1.2;
-}
-.hdr-sub {
-  font-size: .52rem; font-weight: 500;
-  color: rgba(255,255,255,.48);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  margin-top: 2px;
-}
-.hdr-pill {
-  z-index: 1;
-  background: rgba(255,255,255,.12);
-  border: 1px solid rgba(255,255,255,.22);
-  border-radius: 20px;
-  padding: 4px 14px;
-  font-size: .58rem; font-weight: 600;
-  color: rgba(255,255,255,.80);
-  letter-spacing: .9px;
-  text-transform: uppercase;
-  backdrop-filter: blur(4px);
-}
+.alert{background:var(--white);border:1px solid #BFDBFE;border-left:4px solid var(--b1);border-radius:var(--r);padding:1.1rem 1.3rem;margin-top:.9rem;box-shadow:var(--sh-sm);font-family:var(--sans);}
+.alert.warn{border-left-color:var(--warn);border-color:var(--warn-brd);}
+.alert.info{border-left-color:var(--ok);border-color:var(--ok-brd);}
+.alert-h{display:flex;align-items:center;gap:9px;margin-bottom:.5rem;}
+.alert-ic{width:30px;height:30px;border-radius:8px;background:var(--b3);display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0;}
+.alert.warn .alert-ic{background:var(--warn-bg);}
+.alert.info .alert-ic{background:var(--ok-bg);}
+.alert-title{font-size:.85rem;font-weight:700;color:var(--b1);}
+.alert.warn .alert-title{color:var(--warn);}
+.alert.info .alert-title{color:var(--ok);}
+.alert-body{font-size:.79rem;color:var(--text-3);line-height:1.65;padding-left:39px;}
+.alert-body code{background:var(--b3);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:.72rem;color:var(--b1);}
+.alert-body pre{background:var(--b4);border:1px solid rgba(0,61,165,.18);border-radius:var(--r-sm);padding:7px 11px;font-family:var(--mono);font-size:.72rem;color:var(--b1);margin:.45rem 0 .15rem;}
+.sbadge{display:inline-flex;align-items:center;gap:5px;background:var(--ok-bg);border:1px solid var(--ok-brd);border-radius:20px;padding:3px 12px;font-size:.62rem;font-weight:600;color:var(--ok);margin-bottom:.6rem;}
+.sbadge .dg{width:5px;height:5px;border-radius:50%;background:var(--ok);}
 
-/* ════════════════════════════════════════════════════════════════════════
-   CARDS  (base)
-════════════════════════════════════════════════════════════════════════ */
-.card {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--sh);
-  padding: 1.5rem 1.8rem 1.6rem;
-  margin-bottom: .9rem;
-  transition: box-shadow .2s;
-}
-.card:hover { box-shadow: var(--sh-md); }
+.stats{display:flex;gap:.75rem;margin-top:.85rem;}
+.stat{flex:1;background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:.85rem .75rem;text-align:center;box-shadow:var(--sh-sm);transition:box-shadow .18s,transform .14s;}
+.stat:hover{box-shadow:var(--sh);transform:translateY(-2px);}
+.stat .v{font-size:1.2rem;font-weight:800;color:var(--b1);}
+.stat .l{font-size:.58rem;font-weight:700;color:var(--text-3);letter-spacing:.9px;text-transform:uppercase;margin-top:3px;}
 
-/* upload card — tinted blue */
-.upload-card {
-  background: linear-gradient(135deg, #EEF3FF 0%, #E3ECFF 100%);
-  border: 1.5px dashed rgba(0,61,165,.24);
-  border-radius: var(--r-lg);
-  padding: 1.1rem 1.6rem .9rem;
-  margin-bottom: .9rem;
-  transition: border-color .2s;
-}
-.upload-card:hover { border-color: var(--b1); }
+.streamlit-expanderHeader{background:var(--white)!important;border:1px solid var(--border)!important;border-radius:var(--r)!important;font-family:var(--sans)!important;font-size:.76rem!important;font-weight:600!important;color:var(--text-2)!important;box-shadow:var(--sh-sm)!important;}
+.streamlit-expanderContent{background:var(--white)!important;border:1px solid var(--border)!important;border-top:none!important;}
+.hi{background:var(--white);border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:var(--r);padding:.72rem 1rem;margin-bottom:.4rem;box-shadow:var(--sh-sm);transition:box-shadow .15s;}
+.hi:hover{box-shadow:var(--sh);}
+.hi .hp{font-size:.80rem;font-weight:500;color:var(--text);margin-bottom:3px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;}
+.hi .hm{font-size:.61rem;color:var(--text-4);}
 
-/* section divider inside card */
-.card-sep {
-  height: 1px;
-  background: var(--border-lt);
-  margin: 1.1rem -1.8rem;   /* bleeds to card edges */
-}
+.stCodeBlock{border:1px solid #252E45!important;border-radius:var(--r)!important;box-shadow:0 4px 16px rgba(0,0,0,.14)!important;}
+.stCodeBlock pre{background:#161B2A!important;font-family:var(--mono)!important;font-size:.79rem!important;color:#CDD6F4!important;}
+div[data-testid="stCopyButton"] button{background:rgba(137,220,235,.10)!important;border:1px solid rgba(137,220,235,.25)!important;color:#89DCEB!important;border-radius:5px!important;font-size:.65rem!important;}
+div[data-testid="stCopyButton"] button:hover{background:#89DCEB!important;color:#161B2A!important;}
+.stSpinner>div{border-top-color:var(--b2)!important;}
+.pdiv{height:1px;background:var(--border);margin:1.1rem 0;opacity:.5;}
 
-/* ── labels ─────────────────────────────────────────────────────────── */
-.lbl {
-  font-size: .65rem; font-weight: 700;
-  color: var(--b1);
-  letter-spacing: 1.6px;
-  text-transform: uppercase;
-  margin-bottom: .5rem;
-  display: flex; align-items: center; gap: 7px;
-}
-.lbl::before {
-  content: "";
-  width: 3px; height: 13px;
-  background: var(--yellow);
-  border-radius: 2px; flex-shrink: 0;
-}
-.upload-lbl {
-  font-size: .68rem; font-weight: 700;
-  color: var(--b1);
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-  margin-bottom: .5rem;
-  display: flex; align-items: center; gap: 7px;
-}
-.upload-lbl::before {
-  content: "";
-  width: 3px; height: 13px;
-  background: var(--yellow);
-  border-radius: 2px; flex-shrink: 0;
-}
-
-/* ── help text ──────────────────────────────────────────────────────── */
-.upload-help {
-  font-size: .71rem; color: var(--text-3); line-height: 1.65;
-  padding: .45rem .75rem;
-  background: rgba(255,255,255,.65);
-  border-radius: var(--r-sm);
-  border-left: 2px solid rgba(0,61,165,.24);
-  margin-top: .5rem;
-}
-.upload-help code {
-  background: rgba(0,61,165,.08);
-  color: var(--b1);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-family: var(--mono);
-  font-size: .68rem;
-}
-
-/* ── schema loaded ──────────────────────────────────────────────────── */
-.schema-ok {
-  display: flex; align-items: center; gap: 7px;
-  margin-top: .5rem;
-  font-size: .70rem; font-weight: 600;
-  color: var(--ok);
-}
-.schema-ok .dot {
-  width: 7px; height: 7px;
-  border-radius: 50%; background: var(--ok); flex-shrink: 0;
-}
-.tbl-row { display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.4rem; }
-.tbl-chip {
-  background: rgba(0,61,165,.07);
-  border: 1px solid rgba(0,61,165,.16);
-  border-radius: 20px;
-  padding: 2px 10px;
-  font-family: var(--mono);
-  font-size: .63rem; font-weight: 500;
-  color: var(--b1);
-}
-.tbl-more {
-  background: var(--border-lt);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 2px 10px;
-  font-size: .63rem; color: var(--text-3);
-}
-
-/* ════════════════════════════════════════════════════════════════════════
-   WIDGETS
-════════════════════════════════════════════════════════════════════════ */
-
-/* file uploader */
-[data-testid="stFileUploader"] { background: transparent !important; border: none !important; }
-[data-testid="stFileUploader"] label { display: none !important; }
-[data-testid="stFileUploaderDropzone"] {
-  background: rgba(255,255,255,.75) !important;
-  border: 1.5px dashed rgba(0,61,165,.28) !important;
-  border-radius: var(--r) !important;
-  transition: border-color .2s, background .2s !important;
-}
-[data-testid="stFileUploaderDropzone"]:hover {
-  border-color: var(--b1) !important;
-  background: #fff !important;
-}
-[data-testid="stFileUploaderDropzoneInstructions"] span {
-  color: var(--text-3) !important; font-size: .74rem !important;
-}
-[data-testid="stFileUploaderDropzone"] small {
-  color: var(--text-4) !important; font-size: .61rem !important;
-}
-
-/* selects */
-.stSelectbox label {
-  font-size: .62rem !important; font-weight: 700 !important;
-  color: var(--text-3) !important;
-  text-transform: uppercase !important;
-  letter-spacing: .9px !important;
-}
-.stSelectbox > div > div {
-  background: var(--white) !important;
-  border: 1.5px solid var(--border) !important;
-  border-radius: var(--r-sm) !important;
-  font-family: var(--sans) !important;
-  font-size: .84rem !important;
-  color: var(--text) !important;
-  transition: border-color .18s, box-shadow .18s !important;
-}
-.stSelectbox > div > div:focus-within {
-  border-color: var(--b1) !important;
-  box-shadow: var(--sh-blue) !important;
-}
-div[data-baseweb="select"] * { background: #fff !important; color: var(--text) !important; }
-div[data-baseweb="popover"] * {
-  background: #fff !important;
-  border-color: var(--border) !important;
-  color: var(--text) !important;
-}
-
-/* textarea ── INPUT FIELD */
-.stTextArea label { display: none !important; }
-.stTextArea textarea {
-  background: var(--white) !important;
-  border: 1.5px solid var(--border) !important;
-  border-radius: var(--r) !important;
-  font-family: var(--sans) !important;
-  font-size: .9rem !important;
-  line-height: 1.65 !important;
-  color: var(--text) !important;
-  padding: 12px 14px !important;
-  resize: vertical !important;
-  transition: border-color .18s, box-shadow .18s !important;
-  box-shadow: var(--sh-sm) !important;
-}
-.stTextArea textarea:focus {
-  border-color: var(--b1) !important;
-  box-shadow: var(--sh-blue) !important;
-  outline: none !important;
-}
-.stTextArea textarea::placeholder { color: var(--text-4) !important; }
-
-/* PRIMARY BUTTON ── Generate SQL */
-.stButton > button {
-  background: var(--yellow) !important;
-  color: var(--b1) !important;
-  font-family: var(--sans) !important;
-  font-weight: 700 !important;
-  font-size: .9rem !important;
-  border: none !important;
-  border-radius: var(--r-sm) !important;
-  padding: .68rem 2.8rem !important;
-  cursor: pointer !important;
-  display: block !important;
-  margin: .55rem auto 0 !important;
-  transition: background .15s, box-shadow .15s, transform .10s !important;
-  box-shadow: 0 4px 14px rgba(255,199,44,.38) !important;
-  letter-spacing: .2px;
-}
-.stButton > button:hover {
-  background: var(--yel-dk) !important;
-  box-shadow: 0 6px 20px rgba(255,199,44,.50) !important;
-  transform: translateY(-1px) !important;
-}
-.stButton > button:active {
-  transform: translateY(0) !important;
-  box-shadow: 0 2px 8px rgba(255,199,44,.28) !important;
-}
-
-/* ════════════════════════════════════════════════════════════════════════
-   SQL OUTPUT CARD  (dark code theme)
-════════════════════════════════════════════════════════════════════════ */
-.sql-card {
-  background: #161B2A;
-  border: 1px solid #252E45;
-  border-radius: var(--r-lg);
-  padding: 1.3rem 1.5rem 1rem;
-  box-shadow: 0 8px 30px rgba(0,0,0,.20), 0 2px 8px rgba(0,0,0,.12);
-  margin-top: .6rem;
-}
-.sql-card pre {
-  font-family: var(--mono) !important;
-  font-size: .80rem !important;
-  line-height: 1.82 !important;
-  color: #CDD6F4 !important;
-  margin: 0 !important;
-  white-space: pre-wrap !important;
-  word-break: break-word !important;
-}
-/* Catppuccin Mocha syntax palette */
-.kw  { color: #89DCEB; font-weight: 700; }  /* cyan  — keywords    */
-.fn  { color: #A6E3A1; }                     /* green — functions   */
-.str { color: #F38BA8; }                     /* pink  — strings     */
-.cmt { color: #45475A; font-style: italic; } /* gray  — comments    */
-.num { color: #CBA6F7; }                     /* mauve — numbers     */
-
-.sql-bar {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-top: .9rem; padding-top: .72rem;
-  border-top: 1px solid #252E45;
-}
-.sql-tag {
-  display: inline-flex; align-items: center; gap: 5px;
-  background: rgba(137,220,235,.10);
-  border: 1px solid rgba(137,220,235,.22);
-  border-radius: 20px;
-  padding: 3px 11px;
-  font-size: .61rem; font-weight: 600;
-  color: #89DCEB;
-}
-.sql-tag .dot { width: 6px; height: 6px; border-radius: 50%; background: #A6E3A1; }
-
-/* ── clipboard ──────────────────────────────────────────────────────── */
-.clip-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  background: rgba(137,220,235,.10);
-  border: 1px solid rgba(137,220,235,.22);
-  border-radius: var(--r-sm);
-  padding: 3px 12px;
-  font-family: var(--sans);
-  font-size: .68rem; font-weight: 600;
-  color: #89DCEB; cursor: pointer;
-  transition: background .15s;
-}
-.clip-btn:hover  { background: rgba(137,220,235,.22); }
-.clip-btn.copied { color: #A6E3A1; border-color: rgba(166,227,161,.35); }
-
-/* ── download link (secondary) ──────────────────────────────────────── */
-.dl-wrap { margin-top: .6rem; }
-.dl-wrap a {
-  display: inline-flex; align-items: center; gap: 5px;
-  background: transparent;
-  border: 1.5px solid rgba(0,61,165,.30);
-  border-radius: var(--r-sm);
-  padding: .36rem .9rem;
-  font-size: .72rem; font-weight: 600;
-  color: var(--b1); text-decoration: none;
-  transition: background .15s, border-color .15s;
-}
-.dl-wrap a:hover { background: var(--b3); border-color: var(--b1); }
-
-/* ════════════════════════════════════════════════════════════════════════
-   STATUS BADGES
-════════════════════════════════════════════════════════════════════════ */
-.status-safe {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--ok-bg);
-  border: 1px solid var(--ok-brd);
-  border-radius: 20px; padding: 3px 13px;
-  font-size: .67rem; font-weight: 700; color: var(--ok);
-}
-.status-safe::before  { content:"●"; font-size:.55rem; color: var(--ok); }
-
-.status-risky {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--warn-bg);
-  border: 1px solid var(--warn-brd);
-  border-radius: 20px; padding: 3px 13px;
-  font-size: .67rem; font-weight: 700; color: var(--warn);
-}
-.status-risky::before { content:"●"; font-size:.55rem; color: var(--warn); }
-
-.status-invalid {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--err-bg);
-  border: 1px solid var(--err-brd);
-  border-radius: 20px; padding: 3px 13px;
-  font-size: .67rem; font-weight: 700; color: var(--err);
-}
-.status-invalid::before { content:"●"; font-size:.55rem; color: var(--err); }
-
-/* ════════════════════════════════════════════════════════════════════════
-   REVIEW CARD
-════════════════════════════════════════════════════════════════════════ */
-.review-card {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 1.1rem 1.4rem;
-  margin-top: .7rem;
-  box-shadow: var(--sh);
-}
-.review-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: .8rem;
-  margin-top: .6rem;
-}
-.review-col-title {
-  font-size: .60rem; font-weight: 700;
-  color: var(--text-3);
-  letter-spacing: 1.4px; text-transform: uppercase;
-  margin-bottom: .35rem;
-}
-.review-col ul { margin: 0; padding: 0; list-style: none; }
-.review-col ul li {
-  font-size: .78rem; color: var(--text-2);
-  line-height: 1.6; margin-bottom: .24rem;
-  padding-left: 1rem; position: relative;
-}
-.review-col ul li::before {
-  content: "▸"; position: absolute; left: 0;
-  color: var(--b1); font-size: .65rem; top: .10rem;
-}
-.review-col.issues ul li::before { color: var(--warn); }
-.review-col.notes  ul li::before { color: var(--b2); }
-
-/* ════════════════════════════════════════════════════════════════════════
-   INTENT CARD
-════════════════════════════════════════════════════════════════════════ */
-.intent-card {
-  background: var(--b4);
-  border: 1px solid rgba(0,61,165,.15);
-  border-radius: var(--r-lg);
-  padding: .95rem 1.2rem;
-  margin-top: .6rem;
-}
-.intent-grid {
-  display: grid;
-  grid-template-columns: repeat(3,1fr);
-  gap: .6rem; margin-top: .5rem;
-}
-.intent-item {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  padding: .55rem .75rem;
-  transition: box-shadow .15s;
-}
-.intent-item:hover { box-shadow: var(--sh-sm); }
-.intent-item-label {
-  font-size: .57rem; font-weight: 700;
-  color: var(--text-3);
-  letter-spacing: 1.2px; text-transform: uppercase;
-  margin-bottom: .22rem;
-}
-.intent-item-val { font-size: .76rem; color: var(--text); line-height: 1.5; }
-.intent-item-val .tag {
-  display: inline-block;
-  background: rgba(0,61,165,.08);
-  border-radius: 12px; padding: 1px 8px;
-  font-size: .64rem; color: var(--b1);
-  margin: .1rem .12rem .1rem 0;
-}
-.intent-item-val .tag-warn {
-  background: rgba(180,83,9,.09);
-  color: var(--warn);
-}
-.intent-summary { font-size: .82rem; color: var(--b1); font-weight: 500; line-height: 1.55; }
-
-/* ════════════════════════════════════════════════════════════════════════
-   EXPLANATION CARD
-════════════════════════════════════════════════════════════════════════ */
-.exp-card {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--yellow);
-  border-radius: var(--r-lg);
-  padding: 1.1rem 1.4rem;
-  margin-top: .7rem;
-  box-shadow: var(--sh);
-}
-.exp-title {
-  font-size: .65rem; font-weight: 700;
-  color: var(--b1);
-  letter-spacing: 1.5px; text-transform: uppercase;
-  margin-bottom: .55rem;
-  display: flex; align-items: center; gap: 7px;
-}
-.exp-title::before {
-  content: ""; width: 3px; height: 12px;
-  background: var(--yellow); border-radius: 2px; flex-shrink: 0;
-}
-.exp-card ul { margin: .2rem 0 0 1rem; padding: 0; list-style: none; }
-.exp-card ul li {
-  font-size: .81rem; color: var(--text-2);
-  line-height: 1.65; margin-bottom: .28rem;
-  padding-left: 1rem; position: relative;
-}
-.exp-card ul li::before {
-  content: "▸"; position: absolute; left: 0;
-  color: var(--b2); font-size: .68rem; top: .10rem;
-}
-
-/* ════════════════════════════════════════════════════════════════════════
-   ALERTS  (corporate style)
-════════════════════════════════════════════════════════════════════════ */
-.alert {
-  background: var(--white);
-  border: 1px solid #BFDBFE;
-  border-left: 4px solid var(--b1);
-  border-radius: var(--r);
-  padding: 1.1rem 1.3rem;
-  margin-top: .9rem;
-  box-shadow: var(--sh-sm);
-  font-family: var(--sans);
-}
-.alert.warn  { border-left-color: var(--warn); border-color: var(--warn-brd); }
-.alert.info  { border-left-color: var(--ok);   border-color: var(--ok-brd);   }
-.alert-h {
-  display: flex; align-items: center; gap: 9px;
-  margin-bottom: .5rem;
-}
-.alert-ic {
-  width: 30px; height: 30px; border-radius: 8px;
-  background: var(--b3);
-  display: flex; align-items: center; justify-content: center;
-  font-size: .85rem; flex-shrink: 0;
-}
-.alert.warn .alert-ic { background: var(--warn-bg); }
-.alert.info .alert-ic { background: var(--ok-bg); }
-.alert-title { font-size: .85rem; font-weight: 700; color: var(--b1); }
-.alert.warn .alert-title { color: var(--warn); }
-.alert.info .alert-title { color: var(--ok);   }
-.alert-body {
-  font-size: .79rem; color: var(--text-3);
-  line-height: 1.65; padding-left: 39px;
-}
-.alert-body code {
-  background: var(--b3); padding: 1px 5px;
-  border-radius: 4px; font-family: var(--mono);
-  font-size: .72rem; color: var(--b1);
-}
-.alert-body pre {
-  background: var(--b4);
-  border: 1px solid rgba(0,61,165,.18);
-  border-radius: var(--r-sm);
-  padding: 7px 11px;
-  font-family: var(--mono); font-size: .72rem;
-  color: var(--b1); margin: .45rem 0 .15rem;
-}
-
-/* ── schema badge ───────────────────────────────────────────────────── */
-.sbadge {
-  display: inline-flex; align-items: center; gap: 5px;
-  background: var(--ok-bg);
-  border: 1px solid var(--ok-brd);
-  border-radius: 20px; padding: 3px 12px;
-  font-size: .62rem; font-weight: 600;
-  color: var(--ok); margin-bottom: .6rem;
-}
-.sbadge .dg { width: 5px; height: 5px; border-radius: 50%; background: var(--ok); }
-
-/* ════════════════════════════════════════════════════════════════════════
-   STATS ROW
-════════════════════════════════════════════════════════════════════════ */
-.stats {
-  display: flex; gap: .75rem;
-  margin-top: .85rem;
-}
-.stat {
-  flex: 1;
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  padding: .85rem .75rem;
-  text-align: center;
-  box-shadow: var(--sh-sm);
-  transition: box-shadow .18s, transform .14s;
-}
-.stat:hover { box-shadow: var(--sh); transform: translateY(-2px); }
-.stat .v { font-size: 1.2rem; font-weight: 800; color: var(--b1); }
-.stat .l {
-  font-size: .58rem; font-weight: 700;
-  color: var(--text-3);
-  letter-spacing: .9px; text-transform: uppercase;
-  margin-top: 3px;
-}
-
-/* ════════════════════════════════════════════════════════════════════════
-   EXPANDER  (History)
-════════════════════════════════════════════════════════════════════════ */
-.streamlit-expanderHeader {
-  background: var(--white) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--r) !important;
-  font-family: var(--sans) !important;
-  font-size: .76rem !important;
-  font-weight: 600 !important;
-  color: var(--text-2) !important;
-  box-shadow: var(--sh-sm) !important;
-}
-.streamlit-expanderContent {
-  background: var(--white) !important;
-  border: 1px solid var(--border) !important;
-  border-top: none !important;
-}
-
-/* ── history item ───────────────────────────────────────────────────── */
-.hi {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--yellow);
-  border-radius: var(--r);
-  padding: .72rem 1rem;
-  margin-bottom: .4rem;
-  box-shadow: var(--sh-sm);
-  transition: box-shadow .15s;
-}
-.hi:hover { box-shadow: var(--sh); }
-.hi .hp {
-  font-size: .80rem; font-weight: 500; color: var(--text);
-  margin-bottom: 3px;
-  display: -webkit-box;
-  -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
-}
-.hi .hm { font-size: .61rem; color: var(--text-4); }
-
-/* ── code block (native st.code) ────────────────────────────────────── */
-.stCodeBlock {
-  border: 1px solid #252E45 !important;
-  border-radius: var(--r) !important;
-  box-shadow: 0 4px 16px rgba(0,0,0,.14) !important;
-}
-.stCodeBlock pre {
-  background: #161B2A !important;
-  font-family: var(--mono) !important;
-  font-size: .79rem !important;
-  color: #CDD6F4 !important;
-}
-div[data-testid="stCopyButton"] button {
-  background: rgba(137,220,235,.10) !important;
-  border: 1px solid rgba(137,220,235,.25) !important;
-  color: #89DCEB !important;
-  border-radius: 5px !important;
-  font-size: .65rem !important;
-}
-div[data-testid="stCopyButton"] button:hover {
-  background: #89DCEB !important; color: #161B2A !important;
-}
-
-/* ── spinner ────────────────────────────────────────────────────────── */
-.stSpinner > div { border-top-color: var(--b2) !important; }
-
-/* ── page divider ───────────────────────────────────────────────────── */
-.pdiv { height: 1px; background: var(--border); margin: 1.1rem 0; opacity: .5; }
-
-/* ════════════════════════════════════════════════════════════════════════
-   FOOTER
-════════════════════════════════════════════════════════════════════════ */
-.foot {
-  text-align: center;
-  padding: 1rem 0 .5rem;
-  border-top: 1px solid var(--border);
-  margin-top: 2.5rem;
-}
-.foot p {
-  font-family: var(--sans);
-  font-size: .60rem; color: var(--text-4);
-  letter-spacing: .4px; margin: 0;
-}
-.foot p + p { margin-top: .2rem; }
-.foot strong { color: var(--text-3); font-weight: 600; }
+.foot{text-align:center;padding:1rem 0 .5rem;border-top:1px solid var(--border);margin-top:2.5rem;}
+.foot p{font-family:var(--sans);font-size:.60rem;color:var(--text-4);letter-spacing:.4px;margin:0;}
+.foot p+p{margin-top:.2rem;}
+.foot strong{color:var(--text-3);font-weight:600;}
 </style>
 """, unsafe_allow_html=True)
 
 
 # ── session state ─────────────────────────────────────────────────────────────
-for k, v in [("history",[]),("qc",0),("tt",0),("lp","")]:
-    if k not in st.session_state: st.session_state[k] = v
+for k, v in [("history", []), ("qc", 0), ("tt", 0), ("lp", "")]:
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -811,6 +220,108 @@ def parse_schema(f):
 
 def extract_tables(raw):
     return re.findall(r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?\W*(\w+)", raw, re.I)
+
+def dl(sql):
+    enc = b64lib.b64encode(sql.encode()).decode()
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return (f'<div class="dl-wrap"><a href="data:file/sql;base64,{enc}" '
+            f'download="query_{ts}.sql">📥 Download SQL</a></div>')
+
+def chk(sql):
+    if not sql or sql.upper().startswith("ERROR"):
+        return False, sql.replace("ERROR:", "").strip() if sql else "Model yanıt vermedi."
+    danger = re.compile(r"^\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b", re.I)
+    if danger.search(sql):
+        return False, "Güvenlik: Yalnızca SELECT sorguları üretilebilir."
+    if len(sql) < 10:
+        return False, "Model beklenmedik kısa yanıt döndürdü."
+    return True, ""
+
+def mk_alert(icon, title, body, v=""):
+    return (f'<div class="alert {v}"><div class="alert-h">'
+            f'<div class="alert-ic">{icon}</div>'
+            f'<div class="alert-title">{title}</div></div>'
+            f'<div class="alert-body">{body}</div></div>')
+
+def clipboard_js(sql_escaped):
+    return f"""<button class="clip-btn" id="clipbtn"
+  onclick="navigator.clipboard.writeText(document.getElementById('sqlraw').textContent)
+    .then(()=>{{var b=document.getElementById('clipbtn');b.textContent='✓ Kopyalandı';
+    b.classList.add('copied');setTimeout(()=>{{b.textContent='📋 Kopyala';
+    b.classList.remove('copied');}},1800);}})">📋 Kopyala</button>
+<pre id="sqlraw" style="display:none">{sql_escaped}</pre>"""
+
+def render_risk_score(sql: str) -> None:
+    s = sql.upper()
+    INVALID_PATTERNS = [
+        (re.compile(r'\b(DELETE|UPDATE|INSERT|DROP|TRUNCATE|ALTER|GRANT|REVOKE)\b'),
+         "Yazma/yıkıcı operasyon tespit edildi"),
+    ]
+    RISKY_PATTERNS = [
+        (re.compile(r'\bSELECT\s+\*'),         "SELECT * kullanımı — sütunları açıkça belirt"),
+        (re.compile(r'\bFROM\b(?!.*\bWHERE\b)', re.S), "WHERE filtresi eksik — tam tablo taraması riski"),
+        (re.compile(r'(\bJOIN\b.*){3,}', re.S), "3+ JOIN var ama filtre yetersiz olabilir"),
+        (re.compile(r'\bLIKE\s+[\'"]%'),        "Önek joker (%X) — indeks kullanılamaz"),
+        (re.compile(r'\bNOT\s+IN\b'),            "NOT IN — büyük set için performans riski"),
+        (re.compile(r'\bSELECT\b.*\bSELECT\b', re.S), "İç içe SELECT — CTE ile basitleştirilebilir"),
+    ]
+    invalids, risks = [], []
+    for pattern, msg in INVALID_PATTERNS:
+        if pattern.search(s):
+            invalids.append(msg)
+    if not invalids:
+        for pattern, msg in RISKY_PATTERNS:
+            if pattern.search(s):
+                risks.append(msg)
+
+    if invalids:
+        level, score, label = "INVALID", 0, "GEÇERSİZ"
+        badge_bg, badge_color, bar_color = "#FEF2F2", "#B91C1C", "#EF4444"
+        bar_pct, icon, findings = 5, "✗", invalids
+    elif risks:
+        penalty = min(len(risks) * 18, 55)
+        score = 100 - penalty
+        level, label = "RISKY", "RİSKLİ"
+        badge_bg, badge_color, bar_color = "#FFFBEB", "#B45309", "#F59E0B"
+        bar_pct, icon, findings = score, "⚠", risks
+    else:
+        level, score, label = "SAFE", 100, "GÜVENLİ"
+        badge_bg, badge_color, bar_color = "#F0FFF4", "#0D7F4D", "#10B981"
+        bar_pct, icon, findings = 100, "✓", []
+
+    finding_rows = ""
+    for f in findings:
+        dot_color = "#EF4444" if level == "INVALID" else "#F59E0B"
+        finding_rows += (
+            f'<div style="display:flex;align-items:flex-start;gap:8px;'
+            f'padding:.25rem 0;border-bottom:1px solid rgba(0,0,0,.05)">'
+            f'<span style="color:{dot_color};font-size:.75rem;flex-shrink:0;margin-top:.1rem">●</span>'
+            f'<span style="font-size:.77rem;color:#374151;line-height:1.5">{f}</span></div>'
+        )
+    if not findings:
+        finding_rows = '<span style="font-size:.77rem;color:#6B7280;font-style:italic">Kural ihlali tespit edilmedi</span>'
+
+    html = f"""<div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;
+        padding:1rem 1.3rem;margin:.6rem 0;box-shadow:0 4px 12px rgba(0,0,0,.06)">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+    <span style="font-size:.63rem;font-weight:700;color:#003DA5;letter-spacing:1.6px;text-transform:uppercase">🛡️ SQL Risk Skoru</span>
+    <span style="background:{badge_bg};color:{badge_color};border:1px solid {badge_color}33;
+      border-radius:20px;padding:3px 13px;font-size:.68rem;font-weight:700">{icon} {label}</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:.8rem">
+    <div style="flex:1;height:8px;background:#F1F5F9;border-radius:99px;overflow:hidden">
+      <div style="height:100%;width:{bar_pct}%;background:{bar_color};border-radius:99px"></div>
+    </div>
+    <span style="font-size:.80rem;font-weight:800;color:{badge_color};min-width:36px;text-align:right">{score}</span>
+    <span style="font-size:.65rem;color:#9AA5B4">/100</span>
+  </div>
+  <div style="border-top:1px solid #F1F5F9;padding-top:.6rem">
+    <div style="font-size:.60rem;font-weight:700;color:#9AA5B4;letter-spacing:1.3px;text-transform:uppercase;margin-bottom:.4rem">Tespit Edilen Riskler</div>
+    {finding_rows}
+  </div>
+</div>"""
+    st.markdown(html, unsafe_allow_html=True)
+
 
 # ── SYSTEM PROMPT ─────────────────────────────────────────────────────────────
 PIPELINE_SYSTEM = """You are TURKCELL SQL AI – an enterprise-grade SQL assistant.
@@ -919,7 +430,6 @@ def build_user_msg(prompt, dialect, style, schema):
         "Compact":   "Use compact, minimal whitespace.",
         "Annotated": "Add a brief SQL comment above each major clause.",
     }.get(style, "")
-
     parts = [f"DIALECT: {dialect}", f"STYLE: {style_note}"]
     if schema:
         parts.append(f"DATABASE SCHEMA:\n{schema.strip()}")
@@ -928,7 +438,6 @@ def build_user_msg(prompt, dialect, style, schema):
 
 
 def run_pipeline(prompt, key, dialect, style, model, schema=None):
-    """Single API call → returns {intent, sql, review, tokens, elapsed}."""
     t0 = time.time()
     client = openai.OpenAI(api_key=key)
     r = client.chat.completions.create(
@@ -944,7 +453,6 @@ def run_pipeline(prompt, key, dialect, style, model, schema=None):
     elapsed = round(time.time() - t0, 2)
     tokens  = r.usage.total_tokens
 
-    # ── parse four sections ──────────────────────────────────────────────────
     def extract(tag, text):
         m = re.search(rf"---\s*{tag}\s*---(.+?)(?=---\s*[A-Z]|$)", text, re.S | re.I)
         return m.group(1).strip() if m else ""
@@ -954,24 +462,22 @@ def run_pipeline(prompt, key, dialect, style, model, schema=None):
     review_raw      = extract("REVIEW",      raw_out)
     explanation_raw = extract("EXPLANATION", raw_out)
 
-    # parse JSON blocks safely
     def safe_json(text):
         text = text.strip()
         m = re.search(r"\{.*\}", text, re.S)
         if m:
-            try: return json.loads(m.group(0))
-            except Exception: pass
+            try:
+                return json.loads(m.group(0))
+            except Exception:
+                pass
         return {}
 
     intent = safe_json(intent_raw)
     review = safe_json(review_raw)
     sql    = sql_raw.strip()
-
-    # strip any stray fences from SQL block
     sql = re.sub(r"^```[a-zA-Z]*\n?", "", sql).strip()
     sql = re.sub(r"\n?```$", "", sql).strip()
 
-    # normalise explanation into bullet list
     exp_lines = [
         l.strip().lstrip("•-* ").strip()
         for l in explanation_raw.splitlines()
@@ -988,64 +494,9 @@ def run_pipeline(prompt, key, dialect, style, model, schema=None):
         "raw":         raw_out,
     }
 
-def dl(sql):
-    enc = b64lib.b64encode(sql.encode()).decode()
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    return (
-        f'<div class="dl-wrap"><a href="data:file/sql;base64,{enc}" '
-        f'download="query_{ts}.sql">📥 Download SQL</a></div>'
-    )
-
-def chk(sql):
-    if not sql or sql.upper().startswith("ERROR"):
-        return False, sql.replace("ERROR:", "").strip() if sql else "Model yanıt vermedi."
-    danger = re.compile(r"^\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b", re.I)
-    if danger.search(sql):
-        return False, "Güvenlik: Yalnızca SELECT sorguları üretilebilir. Yazma işlemi reddedildi."
-    if len(sql) < 10:
-        return False, "Model beklenmedik kısa yanıt döndürdü."
-    return True, ""
-
-def dl(sql):
-    enc = b64lib.b64encode(sql.encode()).decode()
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f'<div class="dl-wrap"><a href="data:file/sql;base64,{enc}" download="query_{ts}.sql">📥 Download SQL</a></div>'
-
-def mk_alert(icon, title, body, v=""):
-    return (
-        f'<div class="alert {v}"><div class="alert-h">'
-        f'<div class="alert-ic">{icon}</div>'
-        f'<div class="alert-title">{title}</div></div>'
-        f'<div class="alert-body">{body}</div></div>'
-    )
-    
-
-
-def mk_alert(icon, title, body, v=""):
-    return (f'<div class="alert {v}"><div class="alert-h">'
-            f'<div class="alert-ic">{icon}</div>'
-            f'<div class="alert-title">{title}</div></div>'
-            f'<div class="alert-body">{body}</div></div>')
-
-def clipboard_js(sql_escaped):
-    """Returns HTML for a copy-to-clipboard button."""
-    return f"""
-    def render_risk_score(sql: str) -> None:
-<button class="clip-btn" id="clipbtn"
-  onclick="navigator.clipboard.writeText(document.getElementById('sqlraw').textContent)
-    .then(()=>{{
-      var b=document.getElementById('clipbtn');
-      b.textContent='✓ Kopyalandı'; b.classList.add('copied');
-      setTimeout(()=>{{b.textContent='📋 Kopyala'; b.classList.remove('copied');}},1800);
-    }})">
-  📋 Kopyala
-</button>
-<pre id="sqlraw" style="display:none">{sql_escaped}</pre>
-"""
-
 
 # ── api key ───────────────────────────────────────────────────────────────────
-api_key = st.secrets.get("OPENAI_API_KEY","")
+api_key = st.secrets.get("OPENAI_API_KEY", "")
 if not api_key:
     st.markdown(
         f'<div class="hdr"><div class="hdr-left">'
@@ -1055,7 +506,7 @@ if not api_key:
         f'<div class="hdr-sub">Natural Language → SQL</div></div>'
         f'</div><div class="hdr-pill">v4.1</div></div>',
         unsafe_allow_html=True)
-    st.markdown(mk_alert("🔐","API Anahtarı Bulunamadı",
+    st.markdown(mk_alert("🔐", "API Anahtarı Bulunamadı",
         '<code>.streamlit/secrets.toml</code> dosyasına ekleyin:'
         '<pre>OPENAI_API_KEY = "sk-..."</pre>'
         'Streamlit Cloud: <strong>App Settings › Secrets</strong>'),
@@ -1082,7 +533,7 @@ st.markdown(
 st.markdown('<div class="upload-card">', unsafe_allow_html=True)
 st.markdown('<p class="upload-lbl">📂 Veritabanı Şemasını Yükle (.sql, .txt)</p>', unsafe_allow_html=True)
 
-uf = st.file_uploader("sf", type=["sql","txt"],
+uf = st.file_uploader("sf", type=["sql", "txt"],
                       accept_multiple_files=False,
                       label_visibility="collapsed")
 schema_text, schema_meta = None, {}
@@ -1091,13 +542,13 @@ if uf:
     try:
         raw, chars, tables = parse_schema(uf)
         if chars > 80_000:
-            st.markdown(mk_alert("⚠️","Dosya Çok Büyük",
-                "Şema 80 KB limitini aşıyor. Kullanılmayan tabloları kaldırın.","warn"),
+            st.markdown(mk_alert("⚠️", "Dosya Çok Büyük",
+                "Şema 80 KB limitini aşıyor. Kullanılmayan tabloları kaldırın.", "warn"),
                 unsafe_allow_html=True)
         else:
             schema_text = raw
             tbl_names   = extract_tables(raw)
-            schema_meta = {"name":uf.name,"tables":len(tbl_names),"chars":chars}
+            schema_meta = {"name": uf.name, "tables": len(tbl_names), "chars": chars}
             MAX_SHOW    = 14
             chips = "".join(f'<span class="tbl-chip">⬡ {t}</span>' for t in tbl_names[:MAX_SHOW])
             if len(tbl_names) > MAX_SHOW:
@@ -1108,26 +559,26 @@ if uf:
                 + (f'<div class="tbl-row">{chips}</div>' if chips else ""),
                 unsafe_allow_html=True)
     except Exception as e:
-        st.markdown(mk_alert("❌","Dosya Hatası",f"Okunamadı: {e}"),unsafe_allow_html=True)
+        st.markdown(mk_alert("❌", "Dosya Hatası", f"Okunamadı: {e}"), unsafe_allow_html=True)
 
 st.markdown(
-    '<div class="upload-help">💡 <strong>İpucu:</strong> ' +
-    '<code>pg_dump --schema-only</code> (PostgreSQL) veya ' +
-    '<code>SHOW CREATE TABLE</code> (MySQL) ile şemanızı dışa aktarıp ' +
+    '<div class="upload-help">💡 <strong>İpucu:</strong> '
+    '<code>pg_dump --schema-only</code> (PostgreSQL) veya '
+    '<code>SHOW CREATE TABLE</code> (MySQL) ile şemanızı dışa aktarıp '
     '<code>.sql</code> dosyası olarak kaydedin.</div>',
     unsafe_allow_html=True)
 
 if not uf:
-    st.markdown(mk_alert("ℹ️","Şema Yüklenmedi — Genel Bilgi Kullanılıyor",
+    st.markdown(mk_alert("ℹ️", "Şema Yüklenmedi — Genel Bilgi Kullanılıyor",
         "AI tablo/sütun isimlerini açıklamanızdan çıkaracak. "
-        "Daha doğru sonuçlar için şema dosyası yükleyin.","info"),
+        "Daha doğru sonuçlar için şema dosyası yükleyin.", "info"),
         unsafe_allow_html=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════
-#  FORM CARD: configuration + prompt
+#  FORM CARD
 # ══════════════════════════════════════════════════════════════════════════
 st.markdown('<div class="card">', unsafe_allow_html=True)
 
@@ -1135,17 +586,17 @@ st.markdown('<p class="lbl">⚙ Yapılandırma</p>', unsafe_allow_html=True)
 c1, c2, c3 = st.columns(3)
 with c1:
     dialect = st.selectbox("Dialect",
-        ["PostgreSQL","MySQL","SQLite","SQL Server (T-SQL)","BigQuery","Snowflake"],key="d")
+        ["PostgreSQL", "MySQL", "SQLite", "SQL Server (T-SQL)", "BigQuery", "Snowflake"], key="d")
 with c2:
-    style = st.selectbox("Stil",["Standard","Annotated","Compact"],key="s")
+    style = st.selectbox("Stil", ["Standard", "Annotated", "Compact"], key="s")
 with c3:
-    model = st.selectbox("Model",["gpt-4o","gpt-4o-mini","gpt-4-turbo"],key="m")
+    model = st.selectbox("Model", ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"], key="m")
 
 st.markdown('<div class="card-sep"></div>', unsafe_allow_html=True)
 
 if schema_text:
     st.markdown(
-        f'<div class="sbadge"><span class="dg"></span>' +
+        f'<div class="sbadge"><span class="dg"></span>'
         f'Şema Modu · {schema_meta["name"]} · {schema_meta["tables"]} tablo</div>',
         unsafe_allow_html=True)
 
@@ -1165,8 +616,8 @@ st.markdown('</div>', unsafe_allow_html=True)
 if go:
     st.session_state.lp = prompt
     if not prompt.strip():
-        st.markdown(mk_alert("✏️","Boş Prompt",
-            "Lütfen SQL üretmek için bir açıklama girin.","warn"),
+        st.markdown(mk_alert("✏️", "Boş Prompt",
+            "Lütfen SQL üretmek için bir açıklama girin.", "warn"),
             unsafe_allow_html=True)
         st.stop()
 
@@ -1174,31 +625,33 @@ if go:
         try:
             res = run_pipeline(prompt, api_key, dialect, style, model, schema_text)
         except openai.AuthenticationError:
-            st.markdown(mk_alert("🔑","Kimlik Hatası","API anahtarı reddedildi."),
+            st.markdown(mk_alert("🔑", "Kimlik Hatası", "API anahtarı reddedildi."),
                 unsafe_allow_html=True); st.stop()
         except openai.RateLimitError:
-            st.markdown(mk_alert("⏱","Limit Aşıldı","OpenAI kotası doldu. Kısa süre bekleyip tekrar deneyin."),
+            st.markdown(mk_alert("⏱", "Limit Aşıldı", "OpenAI kotası doldu. Kısa süre bekleyip tekrar deneyin."),
                 unsafe_allow_html=True); st.stop()
         except openai.APIConnectionError:
-            st.markdown(mk_alert("🌐","Bağlantı Hatası","OpenAI API'ye ulaşılamadı."),
+            st.markdown(mk_alert("🌐", "Bağlantı Hatası", "OpenAI API'ye ulaşılamadı."),
                 unsafe_allow_html=True); st.stop()
         except Exception as e:
-            st.markdown(mk_alert("⚙️","Beklenmeyen Hata",f"Sorun oluştu:<br><code>{e}</code>"),
+            st.markdown(mk_alert("⚙️", "Beklenmeyen Hata", f"Sorun oluştu:<br><code>{e}</code>"),
                 unsafe_allow_html=True); st.stop()
 
     valid, err = chk(res["sql"])
     if not valid:
-        st.markdown(mk_alert("⚠️","Güvenlik Reddi",err,"warn"),
+        st.markdown(mk_alert("⚠️", "Güvenlik Reddi", err, "warn"),
             unsafe_allow_html=True); st.stop()
 
     # ── store history ─────────────────────────────────────────────────────
     st.session_state.qc += 1
     st.session_state.tt += res["tokens"]
-    st.session_state.history.insert(0,{
-        "prompt": prompt, "sql": res["sql"], "dialect": dialect,
-        "ts":     datetime.datetime.now().strftime("%d %b %Y %H:%M"),
-        "tokens": res["tokens"],
-        "schema": schema_meta.get("name","—") if schema_text else "—",
+    st.session_state.history.insert(0, {
+        "prompt":  prompt,
+        "sql":     res["sql"],
+        "dialect": dialect,
+        "ts":      datetime.datetime.now().strftime("%d %b %Y %H:%M"),
+        "tokens":  res["tokens"],
+        "schema":  schema_meta.get("name", "—") if schema_text else "—",
     })
     st.session_state.history = st.session_state.history[:30]
 
@@ -1207,7 +660,8 @@ if go:
     if intent:
         def tag_list(items, warn=False):
             cls = "tag-warn" if warn else "tag"
-            if not items: return f'<span class="{cls}">—</span>'
+            if not items:
+                return f'<span class="{cls}">—</span>'
             return " ".join(f'<span class="{cls}">{i}</span>' for i in items if i)
 
         st.markdown(
@@ -1227,42 +681,39 @@ if go:
     # ── SQL CARD (dark) ───────────────────────────────────────────────────
     sb = ""
     if schema_text:
-        sb = ('<span class="sql-tag" style="background:rgba(166,227,161,.12);color:#A6E3A1;">' +
-              '<span class="dot" style="background:#A6E3A1"></span>' +
+        sb = ('<span class="sql-tag" style="background:rgba(166,227,161,.12);color:#A6E3A1;">'
+              '<span class="dot" style="background:#A6E3A1"></span>'
               f'{schema_meta["name"]}</span>')
 
-    # ── SQL CARD (dark) ───────────────────────────────────────────────────
-    sql_esc = res["sql"].replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")\
-                        .replace('"',"&quot;").replace("'","&#39;")
+    sql_esc = (res["sql"]
+               .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+               .replace('"', "&quot;").replace("'", "&#39;"))
 
-st.markdown(
-        f'''
-        <div class="sql-card">
-            <pre>{hl(res["sql"])}</pre>
-            <div class="sql-bar">
-                <span class="sql-tag"><span class="dot"></span>{dialect}</span>
-                <div style="display:flex;gap:.45rem;align-items:center;">{sb}
-                    {clipboard_js(sql_esc)}
-                    <span class="sql-tag">{res["elapsed"]}s · {res["tokens"]} tok</span>
-                </div>
-            </div>
-        </div>
-        ''', 
-        unsafe_allow_html=True
-    )
-render_risk_score(res["sql"])
-    
-    
-col_code, col_dl = st.columns([4, 1])
-with col_code:
+    st.markdown(
+        f'<div class="sql-card">'
+        f'<pre>{hl(res["sql"])}</pre>'
+        f'<div class="sql-bar">'
+        f'<span class="sql-tag"><span class="dot"></span>{dialect}</span>'
+        f'<div style="display:flex;gap:.45rem;align-items:center;">{sb}'
+        + clipboard_js(sql_esc) +
+        f'<span class="sql-tag">{res["elapsed"]}s · {res["tokens"]} tok</span>'
+        f'</div></div></div>',
+        unsafe_allow_html=True)
+
+    # ── RISK SCORE ────────────────────────────────────────────────────────
+    render_risk_score(res["sql"])
+
+    # ── COPY + DOWNLOAD ───────────────────────────────────────────────────
+    col_code, col_dl = st.columns([4, 1])
+    with col_code:
         st.code(res["sql"], language="sql")
-with col_dl:
+    with col_dl:
         st.markdown(dl(res["sql"]), unsafe_allow_html=True)
 
     # ── REVIEW CARD ──────────────────────────────────────────────────────
     review = res.get("review", {})
     if review:
-        status = review.get("status","SAFE").upper()
+        status = review.get("status", "SAFE").upper()
         status_html = {
             "SAFE":    '<span class="status-safe">✓ SAFE</span>',
             "RISKY":   '<span class="status-risky">⚠ RISKY</span>',
@@ -1279,8 +730,10 @@ with col_dl:
             '<div class="exp-title">🔍 SQL İnceleme</div>'
             f'<div style="margin:.3rem 0 .55rem">{status_html}</div>'
             '<div class="review-grid">'
-            '<div class="review-col issues"><div class="review-col-title">Sorunlar</div><ul>' + issue_li + '</ul></div>'
-            '<div class="review-col notes"><div class="review-col-title">Notlar</div><ul>' + notes_li + '</ul></div>'
+            '<div class="review-col issues"><div class="review-col-title">Sorunlar</div><ul>'
+            + issue_li + '</ul></div>'
+            '<div class="review-col notes"><div class="review-col-title">Notlar</div><ul>'
+            + notes_li + '</ul></div>'
             '</div></div>',
             unsafe_allow_html=True)
 
@@ -1293,32 +746,20 @@ with col_dl:
         f'</div>',
         unsafe_allow_html=True)
 
-    # ── EXPLANATION (from pipeline Step 4) ────────────────────────────────
+    # ── EXPLANATION ───────────────────────────────────────────────────────
     exp_lines = res.get("explanation", [])
-
-    # Fallback: if pipeline didn't return explanation, call separately
-    if not exp_lines:
-        try:
-            fallback = run_explain(res["sql"], api_key, dialect, model)
-            exp_lines = [l.strip().lstrip("•-* ").strip()
-                         for l in fallback.splitlines() if l.strip()]
-        except Exception:
-            pass
-
     if exp_lines:
-        bullets = "".join(f"<li>{l}</li>" for l in exp_lines if l)
-        # highlight any assumption lines with a distinct style
         bullets_rich = ""
-        for l in exp_lines:
-            if l:
-                lower = l.lower()
+        for line in exp_lines:
+            if line:
+                lower = line.lower()
                 is_assumption = any(w in lower for w in
-                    ["varsayım","kabul edildi","tanım","assumption",
-                     "yorumlandı","borçlu","aktif","hiç ödeme"])
+                    ["varsayım", "kabul edildi", "tanım", "assumption",
+                     "yorumlandı", "borçlu", "aktif", "hiç ödeme"])
                 if is_assumption:
-                    bullets_rich += f'<li style="color:var(--navy);font-weight:600;">{l}</li>'
+                    bullets_rich += f'<li style="color:var(--b1);font-weight:600;">{line}</li>'
                 else:
-                    bullets_rich += f"<li>{l}</li>"
+                    bullets_rich += f"<li>{line}</li>"
         st.markdown(
             '<div class="exp-card"><div class="exp-title">💡 İş Açıklaması & Varsayımlar</div>'
             f'<ul>{bullets_rich}</ul></div>',
@@ -1339,11 +780,11 @@ if st.session_state.history:
                 unsafe_allow_html=True)
             st.code(e["sql"], language="sql")
             st.markdown(dl(e["sql"]), unsafe_allow_html=True)
-            if i < len(st.session_state.history)-1:
+            if i < len(st.session_state.history) - 1:
                 st.markdown('<div style="height:.15rem"></div>', unsafe_allow_html=True)
         st.markdown('<div style="height:.25rem"></div>', unsafe_allow_html=True)
         if st.button("🗑  Geçmişi Temizle", key="clr"):
-            st.session_state.update({"history":[],"qc":0,"tt":0})
+            st.session_state.update({"history": [], "qc": 0, "tt": 0})
             st.rerun()
 
 
