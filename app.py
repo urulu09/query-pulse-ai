@@ -1016,6 +1016,93 @@ def chk(sql):
     return True, ""
 
 def dl(sql):
+  # ── "AI NE ANLADI" bloğu ─────────────────────────────────────────────────────
+def render_intent_block(intent: dict) -> None:
+    """SQL üretilmeden önce AI'ın isteği nasıl yorumladığını gösterir."""
+    if not intent:
+        return
+
+    def _pills(items, color="#003DA5"):
+        if not items:
+            return "—"
+        style = (f"display:inline-block;background:rgba(0,61,165,.09);"
+                 f"border:1px solid rgba(0,61,165,.18);border-radius:20px;"
+                 f"padding:2px 10px;font-size:.72rem;font-family:monospace;"
+                 f"color:{color};margin:2px 3px 2px 0")
+        return " ".join(f'<span style="{style}">{i}</span>'
+                        for i in items if str(i).strip())
+
+    summary     = intent.get("intent_summary", "—")
+    time_val    = intent.get("time_interpretation") or intent.get("time_range") or "—"
+    filters     = intent.get("filters",     [])
+    metrics     = intent.get("metrics",     [])
+    entities    = intent.get("entities",    [])
+    assumptions = intent.get("assumptions", [])
+    ambiguities = intent.get("ambiguities") or intent.get("missing_info") or []
+
+    rows = [
+        ("🕐", "Zaman",         f'<span style="color:#0057D9;font-weight:600">{time_val}</span>'),
+        ("🏷️", "Filtreler",     _pills(filters)),
+        ("📊", "Metrikler",     _pills(metrics)),
+        ("🔗", "Tablolar",      _pills(entities, "#0D7F4D")),
+        ("❓", "Belirsizlikler",_pills(ambiguities, "#B45309") if ambiguities else "—"),
+    ]
+
+    rows_html = "".join(
+        f'<div style="display:flex;gap:8px;align-items:baseline;'
+        f'padding:.28rem 0;border-bottom:1px solid rgba(0,61,165,.07)">'
+        f'<span style="font-size:.72rem;width:18px;flex-shrink:0">{ic}</span>'
+        f'<span style="font-size:.60rem;font-weight:700;color:#6B7A90;'
+        f'letter-spacing:1.2px;text-transform:uppercase;width:90px;flex-shrink:0">'
+        f'{lbl}</span>'
+        f'<span style="font-size:.77rem;color:#3D4A5C;line-height:1.5">{val}</span>'
+        f'</div>'
+        for ic, lbl, val in rows
+    )
+
+    assumption_html = "".join(
+        f'<div style="display:flex;gap:6px;background:rgba(255,199,44,.12);'
+        f'border:1px solid rgba(255,199,44,.35);border-radius:7px;'
+        f'padding:.4rem .75rem;margin-top:.3rem;font-size:.75rem;color:#3D4A5C">'
+        f'<span>⚡</span><span>{a}</span></div>'
+        for a in assumptions if str(a).strip()
+    )
+
+    html = f"""
+<div style="background:linear-gradient(135deg,#EEF5FF,#E6EFFF);
+            border:1px solid rgba(0,61,165,.16);border-radius:12px;
+            overflow:hidden;margin:.6rem 0;
+            box-shadow:0 4px 12px rgba(0,0,0,.07)">
+  <!-- header -->
+  <div style="background:linear-gradient(90deg,#003DA5,#0057D9);
+              padding:.6rem 1.2rem;display:flex;align-items:center;gap:9px">
+    <span style="font-size:1.05rem">🧠</span>
+    <span style="font-size:.65rem;font-weight:700;color:#fff;
+                 letter-spacing:1.8px;text-transform:uppercase">
+      AI NE ANLADI?
+    </span>
+    <span style="margin-left:auto;background:rgba(255,255,255,.15);
+                 border:1px solid rgba(255,255,255,.25);border-radius:20px;
+                 padding:2px 11px;font-size:.58rem;font-weight:600;
+                 color:rgba(255,255,255,.85)">Intent Analizi</span>
+  </div>
+  <!-- summary -->
+  <div style="padding:.8rem 1.2rem .55rem;font-size:.83rem;font-weight:500;
+              color:#003DA5;line-height:1.55;
+              border-bottom:1px solid rgba(0,61,165,.10)">
+    <span style="display:inline-block;width:20px;height:20px;
+                 background:#FFC72C;border-radius:5px;text-align:center;
+                 line-height:20px;font-size:.70rem;margin-right:6px;
+                 vertical-align:middle">→</span>
+    {summary}
+  </div>
+  <!-- detail rows -->
+  <div style="padding:.65rem 1.2rem .5rem">{rows_html}</div>
+  <!-- assumptions -->
+  {"<div style='padding:0 1rem .7rem'>" + assumption_html + "</div>" if assumption_html else ""}
+</div>"""
+
+    st.markdown(html, unsafe_allow_html=True)
     enc = b64lib.b64encode(sql.encode()).decode()
     ts  = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     return (f'<div class="dl-wrap"><a href="data:file/sql;base64,{enc}" '
