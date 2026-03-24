@@ -1234,7 +1234,7 @@ if go:
     sql_esc = res["sql"].replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")\
                         .replace('"',"&quot;").replace("'","&#39;")
 
-     st.markdown(
+         st.markdown(
         f'<div class="sql-card">'
         f'<pre>{hl(res["sql"])}</pre>'
         f'<div class="sql-bar">'
@@ -1246,7 +1246,6 @@ if go:
         unsafe_allow_html=True
     )
 
-    # ✅ BURASI
     render_risk_score(res["sql"])
 
     col_code, col_dl = st.columns([4, 1])
