@@ -1253,10 +1253,10 @@ st.markdown(
 render_risk_score(res["sql"])
     
     
-    col_code, col_dl = st.columns([4, 1])
-    with col_code:
+col_code, col_dl = st.columns([4, 1])
+with col_code:
         st.code(res["sql"], language="sql")
-    with col_dl:
+with col_dl:
         st.markdown(dl(res["sql"]), unsafe_allow_html=True)
 
     # ── REVIEW CARD ──────────────────────────────────────────────────────
