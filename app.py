@@ -1030,6 +1030,7 @@ def mk_alert(icon, title, body, v=""):
 def clipboard_js(sql_escaped):
     """Returns HTML for a copy-to-clipboard button."""
     return f"""
+    def render_risk_score(sql: str) -> None:
 <button class="clip-btn" id="clipbtn"
   onclick="navigator.clipboard.writeText(document.getElementById('sqlraw').textContent)
     .then(()=>{{
@@ -1242,13 +1243,14 @@ if go:
         + clipboard_js(sql_esc) +
         f'<span class="sql-tag">{res["elapsed"]}s · {res["tokens"]} tok</span>'
         f'</div></div></div>',
-        unsafe_allow_html=True)
-
+        unsafe_allow_html=True
+        
+    render_risk_score(res["sql"])
     col_code, col_dl = st.columns([4, 1])
     with col_code:
         st.code(res["sql"], language="sql")
     with col_dl:
-        st.markdown(dl(res["sql"]), unsafe_allow_html=True)
+        st.markdown(dl(res["sql"]) 
 
     # ── REVIEW CARD ──────────────────────────────────────────────────────
     review = res.get("review", {})
