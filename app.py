@@ -997,7 +997,6 @@ def dl(sql):
     )
 
 def chk(sql):
-    def chk(sql):
     if not sql or sql.upper().startswith("ERROR"):
         return False, sql.replace("ERROR:", "").strip() if sql else "Model yanıt vermedi."
     danger = re.compile(r"^\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b", re.I)
