@@ -997,6 +997,7 @@ def dl(sql):
     )
 
 def chk(sql):
+    def chk(sql):
     if not sql or sql.upper().startswith("ERROR"):
         return False, sql.replace("ERROR:", "").strip() if sql else "Model yanıt vermedi."
     danger = re.compile(r"^\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b", re.I)
@@ -1009,16 +1010,14 @@ def chk(sql):
 def dl(sql):
     enc = b64lib.b64encode(sql.encode()).decode()
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    return (
-        f'<div class="dl-wrap"><a href="data:file/sql;base64,{enc}" '
-        f'download="query_{ts}.sql">📥 Download SQL</a></div>'
-    )
+    return f'<div class="dl-wrap"><a href="data:file/sql;base64,{enc}" download="query_{ts}.sql">📥 Download SQL</a></div>'
 
 def mk_alert(icon, title, body, v=""):
-    return (f'<div class="alert {v}"><div class="alert-h">'
-            f'<div class="alert-ic">{icon}</div>'
-            f'<div class="alert-title">{title}</div></div>'
-            f'<div class="alert-body">{body}</div></div>')
+    return (
+        f'<div class="alert {v}"><div class="alert-h">'
+        f'<div class="alert-ic">{icon}</div>'
+        f'<div class="alert-title">{title}</div></div>'
+        f'<div class="alert-body">{body}</div></div>'
     )
     
 
