@@ -1235,7 +1235,7 @@ if go:
     sql_esc = res["sql"].replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")\
                         .replace('"',"&quot;").replace("'","&#39;")
 
-    st.markdown(
+st.markdown(
         f'''
         <div class="sql-card">
             <pre>{hl(res["sql"])}</pre>
@@ -1250,7 +1250,7 @@ if go:
         ''', 
         unsafe_allow_html=True
     )
-    render_risk_score(res["sql"])
+render_risk_score(res["sql"])
     
     
     col_code, col_dl = st.columns([4, 1])
