@@ -1243,7 +1243,7 @@ if go:
         + clipboard_js(sql_esc) +
         f'<span class="sql-tag">{res["elapsed"]}s · {res["tokens"]} tok</span>'
         f'</div></div></div>',
-        unsafe_allow_html=True
+        
         
     render_risk_score(res["sql"])
     col_code, col_dl = st.columns([4, 1])
