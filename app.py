@@ -1250,7 +1250,7 @@ if go:
         ''', 
         unsafe_allow_html=True
     )
-   render_risk_score(res["sql"])
+    render_risk_score(res["sql"])
     
     
     col_code, col_dl = st.columns([4, 1])
