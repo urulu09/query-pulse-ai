@@ -272,309 +272,270 @@ def clipboard_js(sql_escaped):
 <pre id="sqlraw" style="display:none">{sql_escaped}</pre>"""
 
 def render_risk_score(sql: str) -> None:
-    """
-    İki katmanlı risk analizi:
-      1. SQL Güvenlik Kuralları  — teknik riskler
-      2. KVKK / Veri Gizliliği  — kişisel veri tespiti
-    """
     s = sql.upper()
-    sql_orig = sql  # orijinal büyük/küçük harf korunmuş
 
-    # ── KATMAN 1: SQL GÜVENLİK KURALLARI ────────────────────────────────
+    # ── KATMAN 1: SQL GÜVENLİK ───────────────────────────────────────────
     INVALID_RULES = [
         (re.compile(r'\b(DELETE|UPDATE|INSERT|DROP|TRUNCATE|ALTER|GRANT|REVOKE)\b'),
-         "Yazma/yıkıcı operasyon (Read-Only modda geçersiz)"),
+         "Yazma/yıkıcı operasyon tespit edildi"),
     ]
     RISKY_RULES = [
-        (re.compile(r'\bSELECT\s+\*'),
-         "SELECT * — sütunları açıkça belirt, gereksiz veri taşınır"),
-        (re.compile(r'\bFROM\b(?!.*\bWHERE\b)', re.S),
-         "WHERE filtresi eksik — tam tablo taraması riski"),
-        (re.compile(r'(\bJOIN\b.*){3,}', re.S),
-         "3+ JOIN — filtre yeterliliğini kontrol edin"),
-        (re.compile(r'\bLIKE\s+[\'"]%'),
-         "Önek joker (%X) — indeks devre dışı, tam tablo taraması"),
-        (re.compile(r'\bNOT\s+IN\b'),
-         "NOT IN — büyük setlerde ciddi performans kaybı"),
-        (re.compile(r'\bSELECT\b.*\bSELECT\b', re.S),
-         "İç içe SELECT — CTE ile yeniden yazılması önerilir"),
-        (re.compile(r'\bUPDATE\b(?!.*\bWHERE\b)', re.S),
-         "WHERE'siz UPDATE — tüm satırları günceller!"),
-        (re.compile(r'\bDELETE\b(?!.*\bWHERE\b)', re.S),
-         "WHERE'siz DELETE — tüm tabloyu siler!"),
-        (re.compile(r'\bTRUNCATE\b'),
-         "TRUNCATE — geri alınamaz, transaction kullanın"),
-        (re.compile(r'\bDROP\s+TABLE\b'),
-         "DROP TABLE — IF EXISTS guard eklenmeli"),
+        (re.compile(r'\bSELECT\s+\*'),                          "SELECT * — sütunları açıkça belirt"),
+        (re.compile(r'\bFROM\b(?!.*\bWHERE\b)', re.S),          "WHERE filtresi eksik — tam tablo taraması"),
+        (re.compile(r'(\bJOIN\b.*){3,}', re.S),                 "3+ JOIN — filtre yeterliliğini kontrol et"),
+        (re.compile(r'\bLIKE\s+[\'"]%'),                        "Önek joker (%X) — indeks kullanılamaz"),
+        (re.compile(r'\bNOT\s+IN\b'),                           "NOT IN — büyük setlerde performans riski"),
+        (re.compile(r'\bSELECT\b.*\bSELECT\b', re.S),          "İç içe SELECT — CTE önerilir"),
+        (re.compile(r'\bUPDATE\b(?!.*\bWHERE\b)', re.S),        "WHERE'siz UPDATE — tüm satırları etkiler"),
+        (re.compile(r'\bDELETE\b(?!.*\bWHERE\b)', re.S),        "WHERE'siz DELETE — tüm tabloyu siler"),
+        (re.compile(r'\bTRUNCATE\b'),                           "TRUNCATE — geri alınamaz"),
+        (re.compile(r'\bDROP\s+TABLE\b'),                       "DROP TABLE — IF EXISTS guard gerekli"),
     ]
 
     sql_invalids, sql_risks = [], []
     for pat, msg in INVALID_RULES:
-        if pat.search(s):
-            sql_invalids.append(msg)
+        if pat.search(s): sql_invalids.append(msg)
     if not sql_invalids:
         for pat, msg in RISKY_RULES:
-            if pat.search(s):
-                sql_risks.append(msg)
+            if pat.search(s): sql_risks.append(msg)
 
-    sql_total   = len(RISKY_RULES) + len(INVALID_RULES)
-    sql_issues  = len(sql_invalids) + len(sql_risks)
-    sql_ok      = sql_total - sql_issues
-    sql_ok_pct  = round(sql_ok / sql_total * 100)
-    sql_bad_pct = 100 - sql_ok_pct
+    total_sql   = len(RISKY_RULES) + len(INVALID_RULES)
+    issues_sql  = len(sql_invalids) + len(sql_risks)
+    ok_sql      = total_sql - issues_sql
+    pct_ok_sql  = round(ok_sql  / total_sql * 100)
+    pct_bad_sql = 100 - pct_ok_sql
 
     if sql_invalids:
-        sql_level  = "INVALID"
-        sql_label  = "GEÇERSİZ"
-        sql_icon   = "✗"
-        bar_col    = "#EF4444"
-        badge_bg   = "#FEF2F2"
-        badge_fg   = "#B91C1C"
+        sql_status = "GEÇERSİZ"; sql_icon = "✗"; sql_badge_bg = "#FEF2F2"; sql_badge_fg = "#B91C1C"; sql_bar_ok = "#EF4444"; sql_bar_bad = "#FCA5A5"
     elif sql_risks:
-        sql_level  = "RISKY"
-        sql_label  = "RİSKLİ"
-        sql_icon   = "⚠"
-        bar_col    = "#F59E0B"
-        badge_bg   = "#FFFBEB"
-        badge_fg   = "#B45309"
+        sql_status = "RİSKLİ";   sql_icon = "⚠"; sql_badge_bg = "#FFFBEB"; sql_badge_fg = "#B45309"; sql_bar_ok = "#F59E0B"; sql_bar_bad = "#FDE68A"
     else:
-        sql_level  = "SAFE"
-        sql_label  = "GÜVENLİ"
-        sql_icon   = "✓"
-        bar_col    = "#10B981"
-        badge_bg   = "#F0FFF4"
-        badge_fg   = "#0D7F4D"
+        sql_status = "GÜVENLİ";  sql_icon = "✓"; sql_badge_bg = "#EDFAF3"; sql_badge_fg = "#0D7F4D"; sql_bar_ok = "#10B981"; sql_bar_bad = "#D1FAE5"
 
-    # ── KATMAN 2: KVKK / KİŞİSEL VERİ TESPİTİ ──────────────────────────
-    # Sütun/tablo adlarında geçen kişisel veri göstergecileri
-    KVKK_PATTERNS = [
-        # Kimlik bilgileri
+    # ── KATMAN 2: KVKK / KİŞİSEL VERİ ──────────────────────────────────
+    KVKK_RULES = [
         (re.compile(r'\b(tc_no|tckn|kimlik_no|national_id|ssn|passport)\b', re.I),
-         "KİMLİK",   "#7C3AED", "TC Kimlik / Pasaport numarası — en kritik kişisel veri"),
-        (re.compile(r'\b(first_name|last_name|full_name|soyad|isim|customer_name|musteri_adi|kullanici_adi)\b', re.I),
-         "AD-SOYAD", "#7C3AED", "İsim/soyisim — doğrudan tanımlayıcı kişisel veri (KVKK Md.4)"),
-        # İletişim
+         "KİMLİK", "#7C3AED", "TC Kimlik / Pasaport — en kritik kişisel veri (KVKK Md.6)"),
+        (re.compile(r'\b(first_name|last_name|full_name|soyad|isim|customer_name|musteri_adi)\b', re.I),
+         "AD-SOYAD", "#7C3AED", "İsim/soyisim — doğrudan tanımlayıcı (KVKK Md.4)"),
         (re.compile(r'\b(email|e_mail|mail|eposta)\b', re.I),
-         "E-POSTA",  "#DB2777", "E-posta adresi — elektronik iletişim verisi"),
+         "E-POSTA", "#DB2777", "E-posta adresi — elektronik iletişim verisi"),
         (re.compile(r'\b(phone|telefon|gsm|mobile|cep|tel)\b', re.I),
-         "TELEFON",  "#DB2777", "Telefon numarası — iletişim kişisel verisi"),
-        # Konum
+         "TELEFON", "#DB2777", "Telefon numarası — iletişim kişisel verisi"),
         (re.compile(r'\b(address|adres|home_address|shipping_address|delivery_address|location|konum|latitude|longitude)\b', re.I),
-         "KONUM",    "#0891B2", "Adres/konum verisi — yer tespitine izin verir"),
-        # Finansal
+         "KONUM", "#0891B2", "Adres/konum — yer tespitine olanak tanır"),
         (re.compile(r'\b(iban|bic|swift|card_no|credit_card|banka|account_no|hesap)\b', re.I),
          "FİNANSAL", "#D97706", "Banka/kart bilgisi — finansal kişisel veri"),
-        (re.compile(r'\b(salary|maas|ucret|income|odeme|amount.*musteri|payment.*user)\b', re.I),
-         "GELİR",    "#D97706", "Maaş/gelir bilgisi — hassas finansal veri"),
-        # Sağlık
+        (re.compile(r'\b(salary|maas|ucret|income)\b', re.I),
+         "GELİR", "#D97706", "Maaş/gelir bilgisi — hassas finansal veri"),
         (re.compile(r'\b(health|saglik|hastalik|disease|tani|diagnosis|birth_date|dogum_tarihi|birth_year)\b', re.I),
-         "SAĞLIK/YAŞ","#DC2626","Sağlık veya yaş verisi — özel nitelikli kişisel veri (KVKK Md.6)"),
-        # Davranışsal
+         "SAĞLIK/YAŞ", "#DC2626", "Sağlık/doğum verisi — özel nitelikli (KVKK Md.6)"),
         (re.compile(r'\b(ip_address|ip_addr|device_id|user_agent|cookie|session_id)\b', re.I),
-         "DİJİTAL",  "#6366F1", "IP/cihaz kimliği — dijital iz, tanımlamaya izin verir"),
-        # Şifre/güvenlik
+         "DİJİTAL", "#6366F1", "IP/cihaz kimliği — dijital iz verisi"),
         (re.compile(r'\b(password|sifre|token|secret|hash|pin)\b', re.I),
-         "GÜVENLİK", "#B91C1C", "Şifre/token alanı — hiçbir zaman sorgu çıktısında olmamalı!"),
+         "GÜVENLİK", "#B91C1C", "Şifre/token — hiçbir zaman sorgu çıktısında olmamalı"),
     ]
 
     kvkk_hits = []
-    for pat, kategori, renk, aciklama in KVKK_PATTERNS:
-        if pat.search(sql_orig):
+    for pat, kategori, renk, aciklama in KVKK_RULES:
+        if pat.search(sql):
             kvkk_hits.append((kategori, renk, aciklama))
 
-    kvkk_total   = len(KVKK_PATTERNS)
-    kvkk_issues  = len(kvkk_hits)
-    kvkk_ok      = kvkk_total - kvkk_issues
-    kvkk_ok_pct  = round(kvkk_ok / kvkk_total * 100)
-    kvkk_bad_pct = 100 - kvkk_ok_pct
+    total_kvkk   = len(KVKK_RULES)
+    issues_kvkk  = len(kvkk_hits)
+    ok_kvkk      = total_kvkk - issues_kvkk
+    pct_ok_kvkk  = round(ok_kvkk  / total_kvkk * 100)
+    pct_bad_kvkk = 100 - pct_ok_kvkk
 
-    if kvkk_issues == 0:
-        kvkk_level = "TEMİZ"
-        kvkk_icon  = "✓"
-        kvkk_bg    = "#F0FFF4"
-        kvkk_fg    = "#0D7F4D"
-    elif kvkk_issues <= 2:
-        kvkk_level = "DİKKAT"
-        kvkk_icon  = "⚠"
-        kvkk_bg    = "#FFFBEB"
-        kvkk_fg    = "#B45309"
+    if issues_kvkk == 0:
+        kvkk_status = "TEMİZ";        kvkk_icon = "✓"; kvkk_badge_bg = "#EDFAF3"; kvkk_badge_fg = "#0D7F4D"
+    elif issues_kvkk <= 2:
+        kvkk_status = "DİKKAT";       kvkk_icon = "⚠"; kvkk_badge_bg = "#FFFBEB"; kvkk_badge_fg = "#B45309"
     else:
-        kvkk_level = "YÜKSEK RİSK"
-        kvkk_icon  = "🔴"
-        kvkk_bg    = "#FEF2F2"
-        kvkk_fg    = "#B91C1C"
+        kvkk_status = "YÜKSEK RİSK";  kvkk_icon = "🔴"; kvkk_badge_bg = "#FEF2F2"; kvkk_badge_fg = "#B91C1C"
 
-    # ── YARDIMCI: progress bar çifti (olumlu/olumsuz) ──────────────────
-    def dual_bar(ok_pct, bad_pct, ok_col, bad_col):
-        return (
-            f'<div style="display:flex;height:10px;border-radius:99px;overflow:hidden;'
-            f'background:#F1F5F9;gap:2px">'
-            f'<div style="width:{ok_pct}%;background:{ok_col};border-radius:99px 0 0 99px;'
-            f'transition:width .4s"></div>'
-            f'<div style="width:{bad_pct}%;background:{bad_col};border-radius:0 99px 99px 0;'
-            f'transition:width .4s"></div>'
-            f'</div>'
+    # ── HTML PARÇALARI ───────────────────────────────────────────────────
+    # SQL bulgu satırları
+    sql_findings_html = ""
+    all_findings = sql_invalids + sql_risks
+    for msg in all_findings:
+        dot = "#EF4444" if msg in sql_invalids else "#F59E0B"
+        sql_findings_html += (
+            "<div style='display:flex;align-items:flex-start;gap:8px;"
+            "padding:5px 0;border-bottom:1px solid #F1F5F9'>"
+            "<span style='color:" + dot + ";font-size:10px;flex-shrink:0;margin-top:2px'>●</span>"
+            "<span style='font-size:12px;color:#374151;line-height:1.5'>" + msg + "</span>"
+            "</div>"
+        )
+    if not all_findings:
+        sql_findings_html = (
+            "<span style='font-size:12px;color:#0D7F4D;font-style:italic'>"
+            "✓ Tüm güvenlik kuralları karşılandı</span>"
         )
 
-    def legend_dot(color, label, pct):
-        return (
-            f'<span style="display:inline-flex;align-items:center;gap:4px;'
-            f'font-size:.68rem;color:#6B7280">'
-            f'<span style="width:8px;height:8px;border-radius:50%;'
-            f'background:{color};flex-shrink:0"></span>'
-            f'{label} <strong style="color:#1A202C">{pct}%</strong></span>'
-        )
-
-    # ── KATMAN 1 SATIRLARI ───────────────────────────────────────────────
-    all_sql_findings = sql_invalids + sql_risks
-    sql_finding_html = ""
-    for f in all_sql_findings:
-        dot = "#EF4444" if f in sql_invalids else "#F59E0B"
-        sql_finding_html += (
-            f'<div style="display:flex;align-items:flex-start;gap:8px;'
-            f'padding:.3rem 0;border-bottom:1px solid rgba(0,0,0,.04)">'
-            f'<span style="color:{dot};flex-shrink:0;margin-top:.1rem;font-size:.72rem">●</span>'
-            f'<span style="font-size:.76rem;color:#374151;line-height:1.5">{f}</span>'
-            f'</div>'
-        )
-    if not all_sql_findings:
-        sql_finding_html = (
-            '<span style="font-size:.76rem;color:#0D7F4D;font-style:italic">'
-            '✓ Tüm güvenlik kuralları karşılandı</span>'
-        )
-
-    # ── KATMAN 2 SATIRLARI ───────────────────────────────────────────────
-    kvkk_finding_html = ""
+    # KVKK bulgu satırları
+    kvkk_findings_html = ""
     for kategori, renk, aciklama in kvkk_hits:
-        kvkk_finding_html += (
-            f'<div style="display:flex;align-items:flex-start;gap:8px;'
-            f'padding:.3rem 0;border-bottom:1px solid rgba(0,0,0,.04)">'
-            f'<span style="background:{renk};color:#fff;border-radius:4px;'
-            f'padding:1px 7px;font-size:.60rem;font-weight:700;flex-shrink:0;'
-            f'margin-top:.1rem">{kategori}</span>'
-            f'<span style="font-size:.76rem;color:#374151;line-height:1.5">{aciklama}</span>'
-            f'</div>'
+        kvkk_findings_html += (
+            "<div style='display:flex;align-items:flex-start;gap:8px;"
+            "padding:5px 0;border-bottom:1px solid #F1F5F9'>"
+            "<span style='background:" + renk + ";color:#fff;border-radius:4px;"
+            "padding:1px 7px;font-size:10px;font-weight:700;flex-shrink:0;"
+            "margin-top:2px'>" + kategori + "</span>"
+            "<span style='font-size:12px;color:#374151;line-height:1.5'>" + aciklama + "</span>"
+            "</div>"
         )
     if not kvkk_hits:
-        kvkk_finding_html = (
-            '<span style="font-size:.76rem;color:#0D7F4D;font-style:italic">'
-            '✓ Sorguda kişisel/hassas veri sütunu tespit edilmedi</span>'
+        kvkk_findings_html = (
+            "<span style='font-size:12px;color:#0D7F4D;font-style:italic'>"
+            "✓ Kişisel/hassas veri sütunu tespit edilmedi</span>"
         )
 
-    # ── KVKK UYARI NOTU ─────────────────────────────────────────────────
-    kvkk_note = ""
+    # KVKK uyarı notu
+    kvkk_note_html = ""
     if kvkk_hits:
-        kvkk_note = (
-            '<div style="background:#FFF8F0;border:1px solid #FDE68A;border-left:3px solid #D97706;'
-            'border-radius:8px;padding:.55rem .85rem;margin-top:.7rem;'
-            'font-size:.74rem;color:#92400E;line-height:1.6">'
-            '<strong>⚖️ KVKK / GDPR Hatırlatma:</strong> Bu sorgu kişisel veri içeren sütunlara '
-            'erişiyor. Turkcell İç Denetim prosedürleri gereği:<br>'
-            '① Veri sahibi onayı alındı mı?<br>'
-            '② Erişim amacı kayıt altında mı?<br>'
-            '③ Sonuçlar güvenli ortamda işlenecek mi?<br>'
-            '<span style="font-size:.70rem;opacity:.75">'
-            'KVKK Md.4 — Kişisel verilerin işlenmesinde genel ilkeler</span>'
-            '</div>'
+        kvkk_note_html = (
+            "<div style='background:#FFF8F0;border:1px solid #FDE68A;"
+            "border-left:3px solid #D97706;border-radius:8px;"
+            "padding:10px 14px;margin-top:12px;"
+            "font-size:12px;color:#92400E;line-height:1.7'>"
+            "<strong>⚖️ KVKK / GDPR Hatırlatma:</strong> "
+            "Bu sorgu kişisel veri içeren sütunlara erişiyor. "
+            "Turkcell İç Denetim prosedürleri gereği:<br>"
+            "① Veri sahibi onayı alındı mı?<br>"
+            "② Erişim amacı kayıt altında mı?<br>"
+            "③ Sonuçlar güvenli ortamda işlenecek mi?<br>"
+            "<span style='font-size:11px;opacity:0.75'>"
+            "KVKK Md.4 — Kişisel verilerin işlenmesinde genel ilkeler</span>"
+            "</div>"
         )
 
-    # ── FULL HTML ────────────────────────────────────────────────────────
-    html = f"""
-<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;
-     padding:1.1rem 1.4rem;margin:.6rem 0;
-     box-shadow:0 4px 16px rgba(0,0,0,.07)">
+    # ── ANA KART ─────────────────────────────────────────────────────────
+    card = (
+        "<div style='background:#fff;border:1px solid #E2E8F0;border-radius:14px;"
+        "padding:18px 22px;margin:10px 0;"
+        "box-shadow:0 4px 16px rgba(0,0,0,0.07);font-family:Inter,system-ui,sans-serif'>"
 
-  <!-- ── BAŞLIK ── -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-    <span style="font-size:.65rem;font-weight:700;color:#003DA5;
-                 letter-spacing:1.6px;text-transform:uppercase">
-      🛡️ Güvenlik & Uyumluluk Raporu
-    </span>
-    <span style="font-size:.60rem;color:#9AA5B4">İç Denetim Katmanı</span>
-  </div>
+        # Başlık
+        "<div style='display:flex;align-items:center;justify-content:space-between;"
+        "margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #F1F5F9'>"
+        "<span style='font-size:11px;font-weight:700;color:#003DA5;"
+        "letter-spacing:1.6px;text-transform:uppercase'>"
+        "🛡️ Güvenlik &amp; Uyumluluk Raporu</span>"
+        "<span style='font-size:10px;color:#9AA5B4'>İç Denetim Katmanı · v4.1</span>"
+        "</div>"
 
-  <!-- ── İKİ KOLON: SQL + KVKK ── -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:.9rem">
+        # İki kolon
+        "<div style='display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px'>"
 
-    <!-- SQL GÜVENLİK -->
-    <div style="border:1px solid {badge_fg}33;border-radius:10px;padding:.8rem 1rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem">
-        <span style="font-size:.62rem;font-weight:700;color:#374151;
-                     letter-spacing:1.2px;text-transform:uppercase">
-          ⚙️ SQL Güvenlik
-        </span>
-        <span style="background:{badge_bg};color:{badge_fg};
-                     border:1px solid {badge_fg}44;border-radius:20px;
-                     padding:2px 10px;font-size:.65rem;font-weight:700">
-          {sql_icon} {sql_label}
-        </span>
-      </div>
-      {dual_bar(sql_ok_pct, sql_bad_pct, "#10B981", "#EF4444")}
-      <div style="display:flex;justify-content:space-between;margin-top:.4rem;margin-bottom:.7rem">
-        {legend_dot("#10B981", "Olumlu", sql_ok_pct)}
-        {legend_dot("#EF4444", "Olumsuz", sql_bad_pct)}
-        <span style="font-size:.67rem;color:#9AA5B4">{sql_ok}/{sql_total} kural</span>
-      </div>
-      <div style="font-size:.60rem;font-weight:700;color:#9AA5B4;
-                  letter-spacing:1.2px;text-transform:uppercase;margin-bottom:.35rem">
-        Bulgular
-      </div>
-      {sql_finding_html}
-    </div>
+        # ── SOL: SQL GÜVENLİK ──
+        "<div style='border:1px solid #E2E8F0;border-radius:10px;padding:14px'>"
+        "<div style='display:flex;align-items:center;justify-content:space-between;"
+        "margin-bottom:10px'>"
+        "<span style='font-size:11px;font-weight:700;color:#374151;"
+        "letter-spacing:1px;text-transform:uppercase'>⚙️ SQL Güvenlik</span>"
+        "<span style='background:" + sql_badge_bg + ";color:" + sql_badge_fg + ";"
+        "border:1px solid " + sql_badge_fg + "44;border-radius:20px;"
+        "padding:2px 11px;font-size:11px;font-weight:700'>"
+        + sql_icon + " " + sql_status +
+        "</span></div>"
 
-    <!-- KVKK / KİŞİSEL VERİ -->
-    <div style="border:1px solid {kvkk_fg}33;border-radius:10px;padding:.8rem 1rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem">
-        <span style="font-size:.62rem;font-weight:700;color:#374151;
-                     letter-spacing:1.2px;text-transform:uppercase">
-          🔏 KVKK / Veri Gizliliği
-        </span>
-        <span style="background:{kvkk_bg};color:{kvkk_fg};
-                     border:1px solid {kvkk_fg}44;border-radius:20px;
-                     padding:2px 10px;font-size:.65rem;font-weight:700">
-          {kvkk_icon} {kvkk_level}
-        </span>
-      </div>
-      {dual_bar(kvkk_ok_pct, kvkk_bad_pct, "#10B981", "#7C3AED")}
-      <div style="display:flex;justify-content:space-between;margin-top:.4rem;margin-bottom:.7rem">
-        {legend_dot("#10B981", "Temiz", kvkk_ok_pct)}
-        {legend_dot("#7C3AED", "Kişisel Veri", kvkk_bad_pct)}
-        <span style="font-size:.67rem;color:#9AA5B4">{kvkk_ok}/{kvkk_total} kategori</span>
-      </div>
-      <div style="font-size:.60rem;font-weight:700;color:#9AA5B4;
-                  letter-spacing:1.2px;text-transform:uppercase;margin-bottom:.35rem">
-        Tespit Edilen Kategoriler
-      </div>
-      {kvkk_finding_html}
-    </div>
+        # Çift renk bar
+        "<div style='height:10px;background:#F1F5F9;border-radius:99px;overflow:hidden;"
+        "margin-bottom:8px'>"
+        "<div style='height:100%;display:flex'>"
+        "<div style='width:" + str(pct_ok_sql) + "%;background:" + sql_bar_ok + ";transition:width .4s'></div>"
+        "<div style='width:" + str(pct_bad_sql) + "%;background:" + sql_bar_bad + ";transition:width .4s'></div>"
+        "</div></div>"
 
-  </div>
+        # Yüzde gösterimi
+        "<div style='display:flex;justify-content:space-between;align-items:center;"
+        "margin-bottom:12px'>"
+        "<div style='display:flex;gap:14px'>"
+        "<span style='display:flex;align-items:center;gap:5px;font-size:11px;color:#6B7280'>"
+        "<span style='width:8px;height:8px;border-radius:50%;background:" + sql_bar_ok + ";display:inline-block'></span>"
+        "Olumlu <strong style='color:#111827'>" + str(pct_ok_sql) + "%</strong></span>"
+        "<span style='display:flex;align-items:center;gap:5px;font-size:11px;color:#6B7280'>"
+        "<span style='width:8px;height:8px;border-radius:50%;background:" + sql_bar_bad + ";display:inline-block'></span>"
+        "Olumsuz <strong style='color:#111827'>" + str(pct_bad_sql) + "%</strong></span>"
+        "</div>"
+        "<span style='font-size:10px;color:#9AA5B4'>" + str(ok_sql) + "/" + str(total_sql) + " kural</span>"
+        "</div>"
 
-  {kvkk_note}
+        # Bulgular
+        "<div style='font-size:10px;font-weight:700;color:#9AA5B4;"
+        "letter-spacing:1.2px;text-transform:uppercase;margin-bottom:6px'>Bulgular</div>"
+        + sql_findings_html +
+        "</div>"
 
-  <!-- ── ÖZET BAR ── -->
-  <div style="display:flex;align-items:center;gap:.6rem;
-              border-top:1px solid #F1F5F9;padding-top:.75rem;margin-top:.1rem">
-    <span style="font-size:.62rem;font-weight:700;color:#6B7A90;
-                 letter-spacing:1px;text-transform:uppercase;flex-shrink:0">
-      Genel Durum:
-    </span>
-    <span style="background:{badge_bg};color:{badge_fg};border:1px solid {badge_fg}33;
-                 border-radius:20px;padding:2px 12px;font-size:.66rem;font-weight:700">
-      SQL {sql_icon} {sql_label}
-    </span>
-    <span style="background:{kvkk_bg};color:{kvkk_fg};border:1px solid {kvkk_fg}33;
-                 border-radius:20px;padding:2px 12px;font-size:.66rem;font-weight:700">
-      KVKK {kvkk_icon} {kvkk_level}
-    </span>
-    <span style="font-size:.64rem;color:#9AA5B4;margin-left:auto">
-      Turkcell İç Denetim · TURKCELL SQL AI v4.1
-    </span>
-  </div>
+        # ── SAĞ: KVKK ──
+        "<div style='border:1px solid #E2E8F0;border-radius:10px;padding:14px'>"
+        "<div style='display:flex;align-items:center;justify-content:space-between;"
+        "margin-bottom:10px'>"
+        "<span style='font-size:11px;font-weight:700;color:#374151;"
+        "letter-spacing:1px;text-transform:uppercase'>🔏 KVKK / Veri Gizliliği</span>"
+        "<span style='background:" + kvkk_badge_bg + ";color:" + kvkk_badge_fg + ";"
+        "border:1px solid " + kvkk_badge_fg + "44;border-radius:20px;"
+        "padding:2px 11px;font-size:11px;font-weight:700'>"
+        + kvkk_icon + " " + kvkk_status +
+        "</span></div>"
 
-</div>"""
+        # Çift renk bar
+        "<div style='height:10px;background:#F1F5F9;border-radius:99px;overflow:hidden;"
+        "margin-bottom:8px'>"
+        "<div style='height:100%;display:flex'>"
+        "<div style='width:" + str(pct_ok_kvkk) + "%;background:#10B981;transition:width .4s'></div>"
+        "<div style='width:" + str(pct_bad_kvkk) + "%;background:#7C3AED;transition:width .4s'></div>"
+        "</div></div>"
 
-    st.markdown(html, unsafe_allow_html=True)
+        # Yüzde gösterimi
+        "<div style='display:flex;justify-content:space-between;align-items:center;"
+        "margin-bottom:12px'>"
+        "<div style='display:flex;gap:14px'>"
+        "<span style='display:flex;align-items:center;gap:5px;font-size:11px;color:#6B7280'>"
+        "<span style='width:8px;height:8px;border-radius:50%;background:#10B981;display:inline-block'></span>"
+        "Temiz <strong style='color:#111827'>" + str(pct_ok_kvkk) + "%</strong></span>"
+        "<span style='display:flex;align-items:center;gap:5px;font-size:11px;color:#6B7280'>"
+        "<span style='width:8px;height:8px;border-radius:50%;background:#7C3AED;display:inline-block'></span>"
+        "Kişisel Veri <strong style='color:#111827'>" + str(pct_bad_kvkk) + "%</strong></span>"
+        "</div>"
+        "<span style='font-size:10px;color:#9AA5B4'>" + str(ok_kvkk) + "/" + str(total_kvkk) + " kategori</span>"
+        "</div>"
+
+        # Bulgular
+        "<div style='font-size:10px;font-weight:700;color:#9AA5B4;"
+        "letter-spacing:1.2px;text-transform:uppercase;margin-bottom:6px'>"
+        "Tespit Edilen Kategoriler</div>"
+        + kvkk_findings_html +
+        "</div>"
+        "</div>"  # grid sonu
+
+        # KVKK notu
+        + kvkk_note_html +
+
+        # Genel durum özet bar
+        "<div style='display:flex;align-items:center;gap:8px;"
+        "border-top:1px solid #F1F5F9;padding-top:12px;margin-top:4px;flex-wrap:wrap'>"
+        "<span style='font-size:11px;font-weight:700;color:#6B7A90;"
+        "letter-spacing:1px;text-transform:uppercase;flex-shrink:0'>Genel Durum:</span>"
+        "<span style='background:" + sql_badge_bg + ";color:" + sql_badge_fg + ";"
+        "border:1px solid " + sql_badge_fg + "33;border-radius:20px;"
+        "padding:3px 13px;font-size:11px;font-weight:700'>"
+        "SQL " + sql_icon + " " + sql_status + "</span>"
+        "<span style='background:" + kvkk_badge_bg + ";color:" + kvkk_badge_fg + ";"
+        "border:1px solid " + kvkk_badge_fg + "33;border-radius:20px;"
+        "padding:3px 13px;font-size:11px;font-weight:700'>"
+        "KVKK " + kvkk_icon + " " + kvkk_status + "</span>"
+        "<span style='font-size:10px;color:#9AA5B4;margin-left:auto'>"
+        "Turkcell İç Denetim · TURKCELL SQL AI v4.1</span>"
+        "</div>"
+
+        "</div>"  # kart sonu
+    )
+
+    st.markdown(card, unsafe_allow_html=True)
+
+
 
 
 # ── SYSTEM PROMPT ─────────────────────────────────────────────────────────────
