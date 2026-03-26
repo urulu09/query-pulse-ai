@@ -351,7 +351,7 @@ def render_risk_score(sql: str) -> None:
         # Kimlik bilgileri
         (re.compile(r'\b(tc_no|tckn|kimlik_no|national_id|ssn|passport)\b', re.I),
          "KİMLİK",   "#7C3AED", "TC Kimlik / Pasaport numarası — en kritik kişisel veri"),
-        (re.compile(r'\b(first_name|last_name|full_name|ad|soyad|isim|name)\b', re.I),
+        (re.compile(r'\b(first_name|last_name|full_name|soyad|isim|customer_name|musteri_adi|kullanici_adi)\b', re.I),
          "AD-SOYAD", "#7C3AED", "İsim/soyisim — doğrudan tanımlayıcı kişisel veri (KVKK Md.4)"),
         # İletişim
         (re.compile(r'\b(email|e_mail|mail|eposta)\b', re.I),
@@ -359,7 +359,7 @@ def render_risk_score(sql: str) -> None:
         (re.compile(r'\b(phone|telefon|gsm|mobile|cep|tel)\b', re.I),
          "TELEFON",  "#DB2777", "Telefon numarası — iletişim kişisel verisi"),
         # Konum
-        (re.compile(r'\b(address|adres|location|konum|city|sehir|lat|lon|latitude|longitude)\b', re.I),
+        (re.compile(r'\b(address|adres|home_address|shipping_address|delivery_address|location|konum|latitude|longitude)\b', re.I),
          "KONUM",    "#0891B2", "Adres/konum verisi — yer tespitine izin verir"),
         # Finansal
         (re.compile(r'\b(iban|bic|swift|card_no|credit_card|banka|account_no|hesap)\b', re.I),
@@ -367,7 +367,7 @@ def render_risk_score(sql: str) -> None:
         (re.compile(r'\b(salary|maas|ucret|income|odeme|amount.*musteri|payment.*user)\b', re.I),
          "GELİR",    "#D97706", "Maaş/gelir bilgisi — hassas finansal veri"),
         # Sağlık
-        (re.compile(r'\b(health|saglik|hastalik|disease|tani|diagnosis|yas|birth|dogum|age)\b', re.I),
+        (re.compile(r'\b(health|saglik|hastalik|disease|tani|diagnosis|birth_date|dogum_tarihi|birth_year)\b', re.I),
          "SAĞLIK/YAŞ","#DC2626","Sağlık veya yaş verisi — özel nitelikli kişisel veri (KVKK Md.6)"),
         # Davranışsal
         (re.compile(r'\b(ip_address|ip_addr|device_id|user_agent|cookie|session_id)\b', re.I),
