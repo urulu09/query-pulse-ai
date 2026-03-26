@@ -227,16 +227,36 @@ def dl(sql):
     return (f'<div class="dl-wrap"><a href="data:file/sql;base64,{enc}" '
             f'download="query_{ts}.sql">📥 Download SQL</a></div>')
 
-def chk(sql):
+def chk(sql, sql_mode="\U0001f512 Read-Only"):
     if not sql or sql.upper().startswith("ERROR"):
-        return False, sql.replace("ERROR:", "").strip() if sql else "Model yanıt vermedi."
-    danger = re.compile(r"^\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b", re.I)
-    if danger.search(sql):
-        return False, "Güvenlik: Yalnızca SELECT sorguları üretilebilir."
+        return False, sql.replace("ERROR:", "").strip() if sql else "Model yan\u0131t vermedi."
     if len(sql) < 10:
-        return False, "Model beklenmedik kısa yanıt döndürdü."
-    return True, ""
+        return False, "Model beklenmedik k\u0131sa yan\u0131t d\u00f6nd\u00fcrdi."
 
+    ddl_re  = re.compile(r"^\s*(CREATE|ALTER|DROP|TRUNCATE|GRANT|REVOKE)\b", re.I)
+    dml_re  = re.compile(r"^\s*(INSERT|UPDATE|DELETE|MERGE)\b", re.I)
+    any_re  = re.compile(r"^\s*(INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|GRANT|REVOKE)\b", re.I)
+    upd_del = re.compile(r"\b(UPDATE|DELETE)\b", re.I)
+
+    if sql_mode == "\U0001f512 Read-Only":
+        if any_re.search(sql):
+            return False, "Read-Only modda yaln\u0131zca SELECT/WITH/CREATE VIEW \u00fcretilebilir. SQL Modunu de\u011fi\u015ftirin."
+
+    elif sql_mode == "\u270f\ufe0f Write (DML)":
+        if ddl_re.search(sql):
+            return False, "Write modda CREATE/ALTER/DROP izinsiz. DDL modu se\u00e7in."
+        if upd_del.search(sql) and not re.search(r"\bWHERE\b", sql, re.I):
+            return False, "G\u00fcvenlik: WHERE ko\u015fulsuz UPDATE/DELETE t\u00fcm tabloyu etkiler \u2014 reddedildi."
+
+    elif sql_mode == "\U0001f527 DDL":
+        if dml_re.search(sql):
+            return False, "DDL modda INSERT/UPDATE/DELETE izinsiz. Write modu se\u00e7in."
+
+    else:  # Full
+        if upd_del.search(sql) and not re.search(r"\bWHERE\b", sql, re.I):
+            return False, "G\u00fcvenlik: WHERE ko\u015fulsuz UPDATE/DELETE t\u00fcm tabloyu etkiler \u2014 reddedildi."
+
+    return True, ""
 def mk_alert(icon, title, body, v=""):
     return (f'<div class="alert {v}"><div class="alert-h">'
             f'<div class="alert-ic">{icon}</div>'
@@ -252,74 +272,308 @@ def clipboard_js(sql_escaped):
 <pre id="sqlraw" style="display:none">{sql_escaped}</pre>"""
 
 def render_risk_score(sql: str) -> None:
+    """
+    İki katmanlı risk analizi:
+      1. SQL Güvenlik Kuralları  — teknik riskler
+      2. KVKK / Veri Gizliliği  — kişisel veri tespiti
+    """
     s = sql.upper()
-    INVALID_PATTERNS = [
+    sql_orig = sql  # orijinal büyük/küçük harf korunmuş
+
+    # ── KATMAN 1: SQL GÜVENLİK KURALLARI ────────────────────────────────
+    INVALID_RULES = [
         (re.compile(r'\b(DELETE|UPDATE|INSERT|DROP|TRUNCATE|ALTER|GRANT|REVOKE)\b'),
-         "Yazma/yıkıcı operasyon tespit edildi"),
+         "Yazma/yıkıcı operasyon (Read-Only modda geçersiz)"),
     ]
-    RISKY_PATTERNS = [
-        (re.compile(r'\bSELECT\s+\*'),         "SELECT * kullanımı — sütunları açıkça belirt"),
-        (re.compile(r'\bFROM\b(?!.*\bWHERE\b)', re.S), "WHERE filtresi eksik — tam tablo taraması riski"),
-        (re.compile(r'(\bJOIN\b.*){3,}', re.S), "3+ JOIN var ama filtre yetersiz olabilir"),
-        (re.compile(r'\bLIKE\s+[\'"]%'),        "Önek joker (%X) — indeks kullanılamaz"),
-        (re.compile(r'\bNOT\s+IN\b'),            "NOT IN — büyük set için performans riski"),
-        (re.compile(r'\bSELECT\b.*\bSELECT\b', re.S), "İç içe SELECT — CTE ile basitleştirilebilir"),
+    RISKY_RULES = [
+        (re.compile(r'\bSELECT\s+\*'),
+         "SELECT * — sütunları açıkça belirt, gereksiz veri taşınır"),
+        (re.compile(r'\bFROM\b(?!.*\bWHERE\b)', re.S),
+         "WHERE filtresi eksik — tam tablo taraması riski"),
+        (re.compile(r'(\bJOIN\b.*){3,}', re.S),
+         "3+ JOIN — filtre yeterliliğini kontrol edin"),
+        (re.compile(r'\bLIKE\s+[\'"]%'),
+         "Önek joker (%X) — indeks devre dışı, tam tablo taraması"),
+        (re.compile(r'\bNOT\s+IN\b'),
+         "NOT IN — büyük setlerde ciddi performans kaybı"),
+        (re.compile(r'\bSELECT\b.*\bSELECT\b', re.S),
+         "İç içe SELECT — CTE ile yeniden yazılması önerilir"),
+        (re.compile(r'\bUPDATE\b(?!.*\bWHERE\b)', re.S),
+         "WHERE'siz UPDATE — tüm satırları günceller!"),
+        (re.compile(r'\bDELETE\b(?!.*\bWHERE\b)', re.S),
+         "WHERE'siz DELETE — tüm tabloyu siler!"),
+        (re.compile(r'\bTRUNCATE\b'),
+         "TRUNCATE — geri alınamaz, transaction kullanın"),
+        (re.compile(r'\bDROP\s+TABLE\b'),
+         "DROP TABLE — IF EXISTS guard eklenmeli"),
     ]
-    invalids, risks = [], []
-    for pattern, msg in INVALID_PATTERNS:
-        if pattern.search(s):
-            invalids.append(msg)
-    if not invalids:
-        for pattern, msg in RISKY_PATTERNS:
-            if pattern.search(s):
-                risks.append(msg)
 
-    if invalids:
-        level, score, label = "INVALID", 0, "GEÇERSİZ"
-        badge_bg, badge_color, bar_color = "#FEF2F2", "#B91C1C", "#EF4444"
-        bar_pct, icon, findings = 5, "✗", invalids
-    elif risks:
-        penalty = min(len(risks) * 18, 55)
-        score = 100 - penalty
-        level, label = "RISKY", "RİSKLİ"
-        badge_bg, badge_color, bar_color = "#FFFBEB", "#B45309", "#F59E0B"
-        bar_pct, icon, findings = score, "⚠", risks
+    sql_invalids, sql_risks = [], []
+    for pat, msg in INVALID_RULES:
+        if pat.search(s):
+            sql_invalids.append(msg)
+    if not sql_invalids:
+        for pat, msg in RISKY_RULES:
+            if pat.search(s):
+                sql_risks.append(msg)
+
+    sql_total   = len(RISKY_RULES) + len(INVALID_RULES)
+    sql_issues  = len(sql_invalids) + len(sql_risks)
+    sql_ok      = sql_total - sql_issues
+    sql_ok_pct  = round(sql_ok / sql_total * 100)
+    sql_bad_pct = 100 - sql_ok_pct
+
+    if sql_invalids:
+        sql_level  = "INVALID"
+        sql_label  = "GEÇERSİZ"
+        sql_icon   = "✗"
+        bar_col    = "#EF4444"
+        badge_bg   = "#FEF2F2"
+        badge_fg   = "#B91C1C"
+    elif sql_risks:
+        sql_level  = "RISKY"
+        sql_label  = "RİSKLİ"
+        sql_icon   = "⚠"
+        bar_col    = "#F59E0B"
+        badge_bg   = "#FFFBEB"
+        badge_fg   = "#B45309"
     else:
-        level, score, label = "SAFE", 100, "GÜVENLİ"
-        badge_bg, badge_color, bar_color = "#F0FFF4", "#0D7F4D", "#10B981"
-        bar_pct, icon, findings = 100, "✓", []
+        sql_level  = "SAFE"
+        sql_label  = "GÜVENLİ"
+        sql_icon   = "✓"
+        bar_col    = "#10B981"
+        badge_bg   = "#F0FFF4"
+        badge_fg   = "#0D7F4D"
 
-    finding_rows = ""
-    for f in findings:
-        dot_color = "#EF4444" if level == "INVALID" else "#F59E0B"
-        finding_rows += (
-            f'<div style="display:flex;align-items:flex-start;gap:8px;'
-            f'padding:.25rem 0;border-bottom:1px solid rgba(0,0,0,.05)">'
-            f'<span style="color:{dot_color};font-size:.75rem;flex-shrink:0;margin-top:.1rem">●</span>'
-            f'<span style="font-size:.77rem;color:#374151;line-height:1.5">{f}</span></div>'
+    # ── KATMAN 2: KVKK / KİŞİSEL VERİ TESPİTİ ──────────────────────────
+    # Sütun/tablo adlarında geçen kişisel veri göstergecileri
+    KVKK_PATTERNS = [
+        # Kimlik bilgileri
+        (re.compile(r'\b(tc_no|tckn|kimlik_no|national_id|ssn|passport)\b', re.I),
+         "KİMLİK",   "#7C3AED", "TC Kimlik / Pasaport numarası — en kritik kişisel veri"),
+        (re.compile(r'\b(first_name|last_name|full_name|ad|soyad|isim|name)\b', re.I),
+         "AD-SOYAD", "#7C3AED", "İsim/soyisim — doğrudan tanımlayıcı kişisel veri (KVKK Md.4)"),
+        # İletişim
+        (re.compile(r'\b(email|e_mail|mail|eposta)\b', re.I),
+         "E-POSTA",  "#DB2777", "E-posta adresi — elektronik iletişim verisi"),
+        (re.compile(r'\b(phone|telefon|gsm|mobile|cep|tel)\b', re.I),
+         "TELEFON",  "#DB2777", "Telefon numarası — iletişim kişisel verisi"),
+        # Konum
+        (re.compile(r'\b(address|adres|location|konum|city|sehir|lat|lon|latitude|longitude)\b', re.I),
+         "KONUM",    "#0891B2", "Adres/konum verisi — yer tespitine izin verir"),
+        # Finansal
+        (re.compile(r'\b(iban|bic|swift|card_no|credit_card|banka|account_no|hesap)\b', re.I),
+         "FİNANSAL", "#D97706", "Banka/kart bilgisi — finansal kişisel veri"),
+        (re.compile(r'\b(salary|maas|ucret|income|odeme|amount.*musteri|payment.*user)\b', re.I),
+         "GELİR",    "#D97706", "Maaş/gelir bilgisi — hassas finansal veri"),
+        # Sağlık
+        (re.compile(r'\b(health|saglik|hastalik|disease|tani|diagnosis|yas|birth|dogum|age)\b', re.I),
+         "SAĞLIK/YAŞ","#DC2626","Sağlık veya yaş verisi — özel nitelikli kişisel veri (KVKK Md.6)"),
+        # Davranışsal
+        (re.compile(r'\b(ip_address|ip_addr|device_id|user_agent|cookie|session_id)\b', re.I),
+         "DİJİTAL",  "#6366F1", "IP/cihaz kimliği — dijital iz, tanımlamaya izin verir"),
+        # Şifre/güvenlik
+        (re.compile(r'\b(password|sifre|token|secret|hash|pin)\b', re.I),
+         "GÜVENLİK", "#B91C1C", "Şifre/token alanı — hiçbir zaman sorgu çıktısında olmamalı!"),
+    ]
+
+    kvkk_hits = []
+    for pat, kategori, renk, aciklama in KVKK_PATTERNS:
+        if pat.search(sql_orig):
+            kvkk_hits.append((kategori, renk, aciklama))
+
+    kvkk_total   = len(KVKK_PATTERNS)
+    kvkk_issues  = len(kvkk_hits)
+    kvkk_ok      = kvkk_total - kvkk_issues
+    kvkk_ok_pct  = round(kvkk_ok / kvkk_total * 100)
+    kvkk_bad_pct = 100 - kvkk_ok_pct
+
+    if kvkk_issues == 0:
+        kvkk_level = "TEMİZ"
+        kvkk_icon  = "✓"
+        kvkk_bg    = "#F0FFF4"
+        kvkk_fg    = "#0D7F4D"
+    elif kvkk_issues <= 2:
+        kvkk_level = "DİKKAT"
+        kvkk_icon  = "⚠"
+        kvkk_bg    = "#FFFBEB"
+        kvkk_fg    = "#B45309"
+    else:
+        kvkk_level = "YÜKSEK RİSK"
+        kvkk_icon  = "🔴"
+        kvkk_bg    = "#FEF2F2"
+        kvkk_fg    = "#B91C1C"
+
+    # ── YARDIMCI: progress bar çifti (olumlu/olumsuz) ──────────────────
+    def dual_bar(ok_pct, bad_pct, ok_col, bad_col):
+        return (
+            f'<div style="display:flex;height:10px;border-radius:99px;overflow:hidden;'
+            f'background:#F1F5F9;gap:2px">'
+            f'<div style="width:{ok_pct}%;background:{ok_col};border-radius:99px 0 0 99px;'
+            f'transition:width .4s"></div>'
+            f'<div style="width:{bad_pct}%;background:{bad_col};border-radius:0 99px 99px 0;'
+            f'transition:width .4s"></div>'
+            f'</div>'
         )
-    if not findings:
-        finding_rows = '<span style="font-size:.77rem;color:#6B7280;font-style:italic">Kural ihlali tespit edilmedi</span>'
 
-    html = f"""<div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;
-        padding:1rem 1.3rem;margin:.6rem 0;box-shadow:0 4px 12px rgba(0,0,0,.06)">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
-    <span style="font-size:.63rem;font-weight:700;color:#003DA5;letter-spacing:1.6px;text-transform:uppercase">🛡️ SQL Risk Skoru</span>
-    <span style="background:{badge_bg};color:{badge_color};border:1px solid {badge_color}33;
-      border-radius:20px;padding:3px 13px;font-size:.68rem;font-weight:700">{icon} {label}</span>
+    def legend_dot(color, label, pct):
+        return (
+            f'<span style="display:inline-flex;align-items:center;gap:4px;'
+            f'font-size:.68rem;color:#6B7280">'
+            f'<span style="width:8px;height:8px;border-radius:50%;'
+            f'background:{color};flex-shrink:0"></span>'
+            f'{label} <strong style="color:#1A202C">{pct}%</strong></span>'
+        )
+
+    # ── KATMAN 1 SATIRLARI ───────────────────────────────────────────────
+    all_sql_findings = sql_invalids + sql_risks
+    sql_finding_html = ""
+    for f in all_sql_findings:
+        dot = "#EF4444" if f in sql_invalids else "#F59E0B"
+        sql_finding_html += (
+            f'<div style="display:flex;align-items:flex-start;gap:8px;'
+            f'padding:.3rem 0;border-bottom:1px solid rgba(0,0,0,.04)">'
+            f'<span style="color:{dot};flex-shrink:0;margin-top:.1rem;font-size:.72rem">●</span>'
+            f'<span style="font-size:.76rem;color:#374151;line-height:1.5">{f}</span>'
+            f'</div>'
+        )
+    if not all_sql_findings:
+        sql_finding_html = (
+            '<span style="font-size:.76rem;color:#0D7F4D;font-style:italic">'
+            '✓ Tüm güvenlik kuralları karşılandı</span>'
+        )
+
+    # ── KATMAN 2 SATIRLARI ───────────────────────────────────────────────
+    kvkk_finding_html = ""
+    for kategori, renk, aciklama in kvkk_hits:
+        kvkk_finding_html += (
+            f'<div style="display:flex;align-items:flex-start;gap:8px;'
+            f'padding:.3rem 0;border-bottom:1px solid rgba(0,0,0,.04)">'
+            f'<span style="background:{renk};color:#fff;border-radius:4px;'
+            f'padding:1px 7px;font-size:.60rem;font-weight:700;flex-shrink:0;'
+            f'margin-top:.1rem">{kategori}</span>'
+            f'<span style="font-size:.76rem;color:#374151;line-height:1.5">{aciklama}</span>'
+            f'</div>'
+        )
+    if not kvkk_hits:
+        kvkk_finding_html = (
+            '<span style="font-size:.76rem;color:#0D7F4D;font-style:italic">'
+            '✓ Sorguda kişisel/hassas veri sütunu tespit edilmedi</span>'
+        )
+
+    # ── KVKK UYARI NOTU ─────────────────────────────────────────────────
+    kvkk_note = ""
+    if kvkk_hits:
+        kvkk_note = (
+            '<div style="background:#FFF8F0;border:1px solid #FDE68A;border-left:3px solid #D97706;'
+            'border-radius:8px;padding:.55rem .85rem;margin-top:.7rem;'
+            'font-size:.74rem;color:#92400E;line-height:1.6">'
+            '<strong>⚖️ KVKK / GDPR Hatırlatma:</strong> Bu sorgu kişisel veri içeren sütunlara '
+            'erişiyor. Turkcell İç Denetim prosedürleri gereği:<br>'
+            '① Veri sahibi onayı alındı mı?<br>'
+            '② Erişim amacı kayıt altında mı?<br>'
+            '③ Sonuçlar güvenli ortamda işlenecek mi?<br>'
+            '<span style="font-size:.70rem;opacity:.75">'
+            'KVKK Md.4 — Kişisel verilerin işlenmesinde genel ilkeler</span>'
+            '</div>'
+        )
+
+    # ── FULL HTML ────────────────────────────────────────────────────────
+    html = f"""
+<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;
+     padding:1.1rem 1.4rem;margin:.6rem 0;
+     box-shadow:0 4px 16px rgba(0,0,0,.07)">
+
+  <!-- ── BAŞLIK ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+    <span style="font-size:.65rem;font-weight:700;color:#003DA5;
+                 letter-spacing:1.6px;text-transform:uppercase">
+      🛡️ Güvenlik & Uyumluluk Raporu
+    </span>
+    <span style="font-size:.60rem;color:#9AA5B4">İç Denetim Katmanı</span>
   </div>
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:.8rem">
-    <div style="flex:1;height:8px;background:#F1F5F9;border-radius:99px;overflow:hidden">
-      <div style="height:100%;width:{bar_pct}%;background:{bar_color};border-radius:99px"></div>
+
+  <!-- ── İKİ KOLON: SQL + KVKK ── -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:.9rem">
+
+    <!-- SQL GÜVENLİK -->
+    <div style="border:1px solid {badge_fg}33;border-radius:10px;padding:.8rem 1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem">
+        <span style="font-size:.62rem;font-weight:700;color:#374151;
+                     letter-spacing:1.2px;text-transform:uppercase">
+          ⚙️ SQL Güvenlik
+        </span>
+        <span style="background:{badge_bg};color:{badge_fg};
+                     border:1px solid {badge_fg}44;border-radius:20px;
+                     padding:2px 10px;font-size:.65rem;font-weight:700">
+          {sql_icon} {sql_label}
+        </span>
+      </div>
+      {dual_bar(sql_ok_pct, sql_bad_pct, "#10B981", "#EF4444")}
+      <div style="display:flex;justify-content:space-between;margin-top:.4rem;margin-bottom:.7rem">
+        {legend_dot("#10B981", "Olumlu", sql_ok_pct)}
+        {legend_dot("#EF4444", "Olumsuz", sql_bad_pct)}
+        <span style="font-size:.67rem;color:#9AA5B4">{sql_ok}/{sql_total} kural</span>
+      </div>
+      <div style="font-size:.60rem;font-weight:700;color:#9AA5B4;
+                  letter-spacing:1.2px;text-transform:uppercase;margin-bottom:.35rem">
+        Bulgular
+      </div>
+      {sql_finding_html}
     </div>
-    <span style="font-size:.80rem;font-weight:800;color:{badge_color};min-width:36px;text-align:right">{score}</span>
-    <span style="font-size:.65rem;color:#9AA5B4">/100</span>
+
+    <!-- KVKK / KİŞİSEL VERİ -->
+    <div style="border:1px solid {kvkk_fg}33;border-radius:10px;padding:.8rem 1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem">
+        <span style="font-size:.62rem;font-weight:700;color:#374151;
+                     letter-spacing:1.2px;text-transform:uppercase">
+          🔏 KVKK / Veri Gizliliği
+        </span>
+        <span style="background:{kvkk_bg};color:{kvkk_fg};
+                     border:1px solid {kvkk_fg}44;border-radius:20px;
+                     padding:2px 10px;font-size:.65rem;font-weight:700">
+          {kvkk_icon} {kvkk_level}
+        </span>
+      </div>
+      {dual_bar(kvkk_ok_pct, kvkk_bad_pct, "#10B981", "#7C3AED")}
+      <div style="display:flex;justify-content:space-between;margin-top:.4rem;margin-bottom:.7rem">
+        {legend_dot("#10B981", "Temiz", kvkk_ok_pct)}
+        {legend_dot("#7C3AED", "Kişisel Veri", kvkk_bad_pct)}
+        <span style="font-size:.67rem;color:#9AA5B4">{kvkk_ok}/{kvkk_total} kategori</span>
+      </div>
+      <div style="font-size:.60rem;font-weight:700;color:#9AA5B4;
+                  letter-spacing:1.2px;text-transform:uppercase;margin-bottom:.35rem">
+        Tespit Edilen Kategoriler
+      </div>
+      {kvkk_finding_html}
+    </div>
+
   </div>
-  <div style="border-top:1px solid #F1F5F9;padding-top:.6rem">
-    <div style="font-size:.60rem;font-weight:700;color:#9AA5B4;letter-spacing:1.3px;text-transform:uppercase;margin-bottom:.4rem">Tespit Edilen Riskler</div>
-    {finding_rows}
+
+  {kvkk_note}
+
+  <!-- ── ÖZET BAR ── -->
+  <div style="display:flex;align-items:center;gap:.6rem;
+              border-top:1px solid #F1F5F9;padding-top:.75rem;margin-top:.1rem">
+    <span style="font-size:.62rem;font-weight:700;color:#6B7A90;
+                 letter-spacing:1px;text-transform:uppercase;flex-shrink:0">
+      Genel Durum:
+    </span>
+    <span style="background:{badge_bg};color:{badge_fg};border:1px solid {badge_fg}33;
+                 border-radius:20px;padding:2px 12px;font-size:.66rem;font-weight:700">
+      SQL {sql_icon} {sql_label}
+    </span>
+    <span style="background:{kvkk_bg};color:{kvkk_fg};border:1px solid {kvkk_fg}33;
+                 border-radius:20px;padding:2px 12px;font-size:.66rem;font-weight:700">
+      KVKK {kvkk_icon} {kvkk_level}
+    </span>
+    <span style="font-size:.64rem;color:#9AA5B4;margin-left:auto">
+      Turkcell İç Denetim · TURKCELL SQL AI v4.1
+    </span>
   </div>
+
 </div>"""
+
     st.markdown(html, unsafe_allow_html=True)
 
 
@@ -334,14 +588,22 @@ You MUST follow all steps in order. You MUST NOT skip steps.
 ==================================
 GLOBAL RULES
 ==================================
-- ONLY generate SELECT queries
-- NEVER generate INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE
-- NEVER invent tables or columns
-- Use ONLY the provided schema
+SQL MODE defines what operations are allowed. Respect it strictly.
+
+READ-ONLY  → Only SELECT, WITH/CTE, CREATE VIEW
+WRITE      → Also INSERT INTO...SELECT, UPDATE, DELETE, MERGE/UPSERT
+DDL        → Also CREATE TABLE, ALTER TABLE, DROP TABLE,
+             CREATE INDEX, CREATE SEQUENCE
+FULL       → All SQL — add -- WARNING on destructive statements
+
+ALWAYS:
+- Never invent tables or columns — use ONLY the provided schema
 - If something is ambiguous, DO NOT guess silently
 - Prefer correctness over speed
-- Assume corporate production environment
-If user intent implies data modification, politely refuse.
+- For UPDATE/DELETE: always require a WHERE clause
+- Add -- WARNING comment on any destructive statement
+- For multi-step ops: wrap in BEGIN; ... COMMIT; where supported
+- Use CTEs over nested subqueries for readability
 
 ==================================
 STEP 1 – INTENT ANALYSIS
@@ -364,7 +626,8 @@ Output MUST be valid JSON:
   "metrics": [],
   "grouping": [],
   "assumptions": [],
-  "ambiguities": []
+  "ambiguities": [],
+  "operation_type": "SELECT | INSERT | UPDATE | DELETE | DDL | MIXED"
 }
 
 ==================================
@@ -381,6 +644,10 @@ Rules:
 - Use table aliases
 - Apply correct time logic
 - Keep query readable and maintainable
+- For INSERT: list column names explicitly, never positional order
+- For UPDATE/DELETE: always include WHERE; add -- WARNING comment
+- For DDL: add IF NOT EXISTS / IF EXISTS guards
+- For analytics: prefer CTEs over nested subqueries
 
 ==================================
 STEP 3 – SQL REVIEW
@@ -396,7 +663,8 @@ Output MUST be valid JSON:
 {
   "status": "SAFE | RISKY | INVALID",
   "issues": [],
-  "notes": []
+  "notes": [],
+  "transaction_recommended": true
 }
 
 ==================================
@@ -424,27 +692,34 @@ Return your response in FOUR clearly separated sections:
 Do NOT add any extra text outside these four sections."""
 
 
-def build_user_msg(prompt, dialect, style, schema):
+def build_user_msg(prompt, dialect, style, schema, sql_mode="🔒 Read-Only"):
     style_note = {
         "Standard":  "Use uppercase keywords and clean multi-line formatting.",
         "Compact":   "Use compact, minimal whitespace.",
         "Annotated": "Add a brief SQL comment above each major clause.",
     }.get(style, "")
-    parts = [f"DIALECT: {dialect}", f"STYLE: {style_note}"]
+    mode_map = {
+        "🔒 Read-Only":   "READ-ONLY — Only SELECT, WITH/CTE, CREATE VIEW allowed.",
+        "✏️ Write (DML)": "WRITE — SELECT + INSERT INTO...SELECT, UPDATE (with WHERE), DELETE (with WHERE), MERGE allowed.",
+        "🔧 DDL":           "DDL — SELECT + CREATE TABLE/INDEX/SEQUENCE, ALTER TABLE, DROP (with IF EXISTS guard) allowed.",
+        "⚡ Full (Tamümü)":  "FULL — All SQL allowed. Add -- WARNING on any destructive statement (DELETE, DROP, TRUNCATE, UPDATE).",
+    }
+    mode_note = mode_map.get(sql_mode, mode_map["🔒 Read-Only"])
+    parts = [f"DIALECT: {dialect}", f"SQL MODE: {mode_note}", f"STYLE: {style_note}"]
     if schema:
         parts.append(f"DATABASE SCHEMA:\n{schema.strip()}")
     parts.append(f"USER REQUEST: {prompt.strip()}")
     return "\n\n".join(parts)
 
 
-def run_pipeline(prompt, key, dialect, style, model, schema=None):
+def run_pipeline(prompt, key, dialect, style, model, schema=None, sql_mode="🔒 Read-Only"):
     t0 = time.time()
     client = openai.OpenAI(api_key=key)
     r = client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": PIPELINE_SYSTEM},
-            {"role": "user",   "content": build_user_msg(prompt, dialect, style, schema)},
+            {"role": "user",   "content": build_user_msg(prompt, dialect, style, schema, sql_mode)},
         ],
         temperature=0.1,
         max_tokens=2400,
@@ -583,7 +858,7 @@ st.markdown('</div>', unsafe_allow_html=True)
 st.markdown('<div class="card">', unsafe_allow_html=True)
 
 st.markdown('<p class="lbl">⚙ Yapılandırma</p>', unsafe_allow_html=True)
-c1, c2, c3 = st.columns(3)
+c1, c2, c3, c4 = st.columns(4)
 with c1:
     dialect = st.selectbox("Dialect",
         ["PostgreSQL", "MySQL", "SQLite", "SQL Server (T-SQL)", "BigQuery", "Snowflake"], key="d")
@@ -591,6 +866,11 @@ with c2:
     style = st.selectbox("Stil", ["Standard", "Annotated", "Compact"], key="s")
 with c3:
     model = st.selectbox("Model", ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"], key="m")
+with c4:
+    sql_mode = st.selectbox("SQL Modu",
+        ["🔒 Read-Only", "✏️ Write (DML)", "🔧 DDL", "⚡ Full (Tamümü)"],
+        key="sql_mode",
+        help="🔒 Read-Only: SELECT · ✏️ Write: INSERT/UPDATE/DELETE · 🔧 DDL: CREATE/ALTER/DROP · ⚡ Full: kısıtsız")
 
 st.markdown('<div class="card-sep"></div>', unsafe_allow_html=True)
 
@@ -623,7 +903,7 @@ if go:
 
     with st.spinner("Pipeline çalışıyor: Intent → SQL → Review…"):
         try:
-            res = run_pipeline(prompt, api_key, dialect, style, model, schema_text)
+            res = run_pipeline(prompt, api_key, dialect, style, model, schema_text, sql_mode)
         except openai.AuthenticationError:
             st.markdown(mk_alert("🔑", "Kimlik Hatası", "API anahtarı reddedildi."),
                 unsafe_allow_html=True); st.stop()
@@ -637,7 +917,7 @@ if go:
             st.markdown(mk_alert("⚙️", "Beklenmeyen Hata", f"Sorun oluştu:<br><code>{e}</code>"),
                 unsafe_allow_html=True); st.stop()
 
-    valid, err = chk(res["sql"])
+    valid, err = chk(res["sql"], sql_mode)
     if not valid:
         st.markdown(mk_alert("⚠️", "Güvenlik Reddi", err, "warn"),
             unsafe_allow_html=True); st.stop()
@@ -679,6 +959,17 @@ if go:
             unsafe_allow_html=True)
 
     # ── SQL CARD (dark) ───────────────────────────────────────────────────
+    mode_colors = {
+        "🔒 Read-Only":   ("rgba(13,127,77,.15)",   "#A6E3A1"),
+        "✏️ Write (DML)": ("rgba(251,146,60,.15)",  "#FB923C"),
+        "🔧 DDL":           ("rgba(167,139,250,.15)", "#C4B5FD"),
+        "⚡ Full (Tamümü)":  ("rgba(249,115,22,.18)",  "#FDBA74"),
+    }
+    mc_bg, mc_fg = mode_colors.get(sql_mode, mode_colors["🔒 Read-Only"])
+    mode_label   = sql_mode.split("(")[0].strip()
+    mode_tag = (f'<span class="sql-tag" style="background:{mc_bg};color:{mc_fg};">'
+                f'{mode_label}</span>')
+
     sb = ""
     if schema_text:
         sb = ('<span class="sql-tag" style="background:rgba(166,227,161,.12);color:#A6E3A1;">'
@@ -694,7 +985,7 @@ if go:
         f'<pre>{hl(res["sql"])}</pre>'
         f'<div class="sql-bar">'
         f'<span class="sql-tag"><span class="dot"></span>{dialect}</span>'
-        f'<div style="display:flex;gap:.45rem;align-items:center;">{sb}'
+        f'<div style="display:flex;gap:.45rem;align-items:center;">{mode_tag}{sb}'
         + clipboard_js(sql_esc) +
         f'<span class="sql-tag">{res["elapsed"]}s · {res["tokens"]} tok</span>'
         f'</div></div></div>',
