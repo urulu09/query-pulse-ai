@@ -9,7 +9,7 @@ _L = "/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUk
 LOGO_SRC = f"data:image/png;base64,{_L}"
 
 st.set_page_config(
-    page_title="TURKCELL SQL AI",
+    page_title="turkcell.sql.ai.com.tr",
     page_icon="🟡",
     layout="centered",
     initial_sidebar_state="collapsed",
@@ -167,8 +167,10 @@ div[data-baseweb="popover"]*{background:#fff!important;border-color:var(--border
 .stat .v{font-size:1.2rem;font-weight:800;color:var(--b1);}
 .stat .l{font-size:.58rem;font-weight:700;color:var(--text-3);letter-spacing:.9px;text-transform:uppercase;margin-top:3px;}
 
-.streamlit-expanderHeader{background:var(--white)!important;border:1px solid var(--border)!important;border-radius:var(--r)!important;font-family:var(--sans)!important;font-size:.76rem!important;font-weight:600!important;color:var(--text-2)!important;box-shadow:var(--sh-sm)!important;}
-.streamlit-expanderContent{background:var(--white)!important;border:1px solid var(--border)!important;border-top:none!important;}
+.streamlit-expanderHeader{background:#FFFBEB!important;border:1.5px solid #FCD34D!important;border-radius:var(--r)!important;font-family:var(--sans)!important;font-size:.78rem!important;font-weight:700!important;color:#92400E!important;box-shadow:0 2px 8px rgba(245,158,11,.18)!important;padding:10px 16px!important;}
+.streamlit-expanderHeader:hover{background:#FEF3C7!important;border-color:#F59E0B!important;}
+.streamlit-expanderContent{background:#FFFDF5!important;border:1.5px solid #FCD34D!important;border-top:none!important;border-radius:0 0 var(--r) var(--r)!important;padding:4px 0!important;}
+.streamlit-expanderHeader svg{color:#B45309!important;fill:#B45309!important;}
 .hi{background:var(--white);border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:var(--r);padding:.72rem 1rem;margin-bottom:.4rem;box-shadow:var(--sh-sm);transition:box-shadow .15s;}
 .hi:hover{box-shadow:var(--sh);}
 .hi .hp{font-size:.80rem;font-weight:500;color:var(--text);margin-bottom:3px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;}
@@ -869,7 +871,7 @@ if not api_key:
         f'<div class="hdr"><div class="hdr-left">'
         f'<img class="hdr-logo" src="{LOGO_SRC}" alt="logo">'
         f'<div class="hdr-vline"></div>'
-        f'<div><div class="hdr-title">TURKCELL SQL AI</div>'
+        f'<div><div class="hdr-title">turkcell.sql.ai.com.tr</div>'
         f'<div class="hdr-sub">Natural Language → SQL</div></div>'
         f'</div><div class="hdr-pill">v4.1</div></div>',
         unsafe_allow_html=True)
@@ -888,7 +890,7 @@ st.markdown(
     f'<div class="hdr"><div class="hdr-left">'
     f'<img class="hdr-logo" src="{LOGO_SRC}" alt="logo">'
     f'<div class="hdr-vline"></div>'
-    f'<div><div class="hdr-title">TURKCELL SQL AI</div>'
+    f'<div><div class="hdr-title">turkcell.sql.ai.com.tr</div>'
     f'<div class="hdr-sub">Natural Language → SQL</div></div>'
     f'</div><div class="hdr-pill">v4.1 · Pipeline</div></div>',
     unsafe_allow_html=True)
@@ -1176,7 +1178,7 @@ if st.session_state.history:
 # ══════════════════════════════════════════════════════════════════════════
 st.markdown(
     '<div class="foot">'
-    '<p>© 2026 <strong>TURKCELL SQL AI</strong> | L2 DevOps Operations | Powered by OpenAI</p>'
+    '<p>© 2026 <strong>turkcell.sql.ai.com.tr</strong> | TURKCELL SQL AI | L2 DevOps Operations | Powered by OpenAI</p>'
     '<p>Global Bilgi · Streamlit · Tüm hakları saklıdır.</p>'
     '</div>',
     unsafe_allow_html=True)
