@@ -4,6 +4,12 @@ TURKCELL SQL AI — app.py  v4.1
 import streamlit as st
 import openai
 import re, time, datetime, json, base64 as b64lib
+import sqlite3, hashlib
+try:
+    import bcrypt
+    BCRYPT_OK = True
+except ImportError:
+    BCRYPT_OK = False
 
 _L = "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"
 LOGO_SRC = f"data:image/png;base64,{_L}"
@@ -192,9 +198,375 @@ div[data-testid="stCopyButton"] button:hover{background:#89DCEB!important;color:
 
 
 # ── session state ─────────────────────────────────────────────────────────────
-for k, v in [("history", []), ("qc", 0), ("tt", 0), ("lp", "")]:
+for k, v in [("history",[]),("qc",0),("tt",0),("lp",""),
+              ("logged_in",False),("username",""),("role",""),
+              ("user_id",None),("page","main")]:
     if k not in st.session_state:
         st.session_state[k] = v
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  VERİTABANI — SQLite
+# ══════════════════════════════════════════════════════════════════════════
+DB_PATH = "turkcell_sql_ai.db"
+
+def get_db():
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db()
+    c = conn.cursor()
+
+    # Kullanıcılar
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            username    TEXT    UNIQUE NOT NULL,
+            fullname    TEXT    NOT NULL DEFAULT '',
+            password_hash TEXT  NOT NULL,
+            role        TEXT    NOT NULL DEFAULT 'analyst',
+            is_active   INTEGER DEFAULT 1,
+            created_at  TEXT    DEFAULT (datetime('now')),
+            last_login  TEXT
+        )
+    """)
+
+    # Şemalar
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS schemas (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            name        TEXT    NOT NULL,
+            description TEXT    DEFAULT '',
+            content     TEXT    NOT NULL,
+            table_count INTEGER DEFAULT 0,
+            created_at  TEXT    DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+
+    # Sorgu geçmişi (audit log)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS query_log (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            username    TEXT    NOT NULL,
+            prompt      TEXT    NOT NULL,
+            sql_out     TEXT,
+            dialect     TEXT,
+            style       TEXT,
+            sql_mode    TEXT,
+            schema_name TEXT    DEFAULT '',
+            tokens      INTEGER DEFAULT 0,
+            elapsed_sec REAL    DEFAULT 0,
+            risk_level  TEXT    DEFAULT '',
+            kvkk_hit    INTEGER DEFAULT 0,
+            created_at  TEXT    DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+
+    conn.commit()
+
+    # Admin kullanıcı yoksa oluştur
+    existing = c.execute("SELECT id FROM users WHERE username='admin'").fetchone()
+    if not existing:
+        pw_hash = _hash_pw("admin123")
+        c.execute(
+            "INSERT INTO users (username, fullname, password_hash, role) VALUES (?,?,?,?)",
+            ("admin", "Sistem Yöneticisi", pw_hash, "admin")
+        )
+        conn.commit()
+
+    conn.close()
+
+def _hash_pw(password: str) -> str:
+    if BCRYPT_OK:
+        return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def _check_pw(password: str, hashed: str) -> bool:
+    if BCRYPT_OK:
+        try:
+            return bcrypt.checkpw(password.encode(), hashed.encode())
+        except Exception:
+            pass
+    return hashlib.sha256(password.encode()).hexdigest() == hashed
+
+def db_login(username: str, password: str):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM users WHERE username=? AND is_active=1", (username,)
+    ).fetchone()
+    conn.close()
+    if row and _check_pw(password, row["password_hash"]):
+        conn2 = get_db()
+        conn2.execute("UPDATE users SET last_login=datetime('now') WHERE id=?", (row["id"],))
+        conn2.commit(); conn2.close()
+        return dict(row)
+    return None
+
+def db_log_query(user_id, username, prompt, sql_out, dialect, style,
+                 sql_mode, schema_name, tokens, elapsed, risk_level="", kvkk_hit=0):
+    conn = get_db()
+    conn.execute("""
+        INSERT INTO query_log
+        (user_id,username,prompt,sql_out,dialect,style,sql_mode,
+         schema_name,tokens,elapsed_sec,risk_level,kvkk_hit)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+    """, (user_id, username, prompt, sql_out, dialect, style, sql_mode,
+          schema_name, tokens, elapsed, risk_level, kvkk_hit))
+    conn.commit(); conn.close()
+
+def db_get_history(user_id, limit=50):
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT * FROM query_log
+        WHERE user_id=?
+        ORDER BY created_at DESC LIMIT ?
+    """, (user_id, limit)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def db_get_all_history(limit=200):
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT * FROM query_log
+        ORDER BY created_at DESC LIMIT ?
+    """, (limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def db_save_schema(user_id, name, description, content, table_count):
+    conn = get_db()
+    conn.execute("""
+        INSERT INTO schemas (user_id, name, description, content, table_count)
+        VALUES (?,?,?,?,?)
+    """, (user_id, name, description, content, table_count))
+    conn.commit(); conn.close()
+
+def db_get_schemas(user_id, role):
+    conn = get_db()
+    if role == "admin":
+        rows = conn.execute("""
+            SELECT s.*, u.username as owner
+            FROM schemas s JOIN users u ON s.user_id=u.id
+            ORDER BY s.created_at DESC
+        """).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT s.*, u.username as owner
+            FROM schemas s JOIN users u ON s.user_id=u.id
+            WHERE s.user_id=?
+            ORDER BY s.created_at DESC
+        """, (user_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def db_delete_schema(schema_id, user_id, role):
+    conn = get_db()
+    if role == "admin":
+        conn.execute("DELETE FROM schemas WHERE id=?", (schema_id,))
+    else:
+        conn.execute("DELETE FROM schemas WHERE id=? AND user_id=?", (schema_id, user_id))
+    conn.commit(); conn.close()
+
+def db_get_users():
+    conn = get_db()
+    rows = conn.execute("SELECT id,username,fullname,role,is_active,created_at,last_login FROM users ORDER BY id").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def db_add_user(username, fullname, password, role):
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO users (username,fullname,password_hash,role) VALUES (?,?,?,?)",
+            (username, fullname, _hash_pw(password), role)
+        )
+        conn.commit()
+        conn.close()
+        return True, "Kullanıcı oluşturuldu."
+    except sqlite3.IntegrityError:
+        conn.close()
+        return False, "Bu kullanıcı adı zaten var."
+
+def db_toggle_user(user_id, active):
+    conn = get_db()
+    conn.execute("UPDATE users SET is_active=? WHERE id=?", (active, user_id))
+    conn.commit(); conn.close()
+
+def db_change_password(user_id, new_password):
+    conn = get_db()
+    conn.execute("UPDATE users SET password_hash=? WHERE id=?", (_hash_pw(new_password), user_id))
+    conn.commit(); conn.close()
+
+# Rol → izin verilen SQL modları
+ROLE_MODES = {
+    "viewer":  ["🔒 Read-Only"],
+    "analyst": ["🔒 Read-Only", "✏️ Write (DML)"],
+    "dba":     ["🔒 Read-Only", "✏️ Write (DML)", "🔧 DDL"],
+    "admin":   ["🔒 Read-Only", "✏️ Write (DML)", "🔧 DDL", "⚡ Full (Tamümü)"],
+}
+ROLE_LABELS = {
+    "viewer":  "👁 Viewer",
+    "analyst": "📊 Analyst",
+    "dba":     "🔧 DBA",
+    "admin":   "⚡ Admin",
+}
+
+# DB başlat
+init_db()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  GİRİŞ EKRANI
+# ══════════════════════════════════════════════════════════════════════════
+def render_login():
+    st.markdown(
+        f'''<div class="hdr"><div class="hdr-left">
+        <img class="hdr-logo" src="{LOGO_SRC}" alt="logo">
+        <div class="hdr-vline"></div>
+        <div><div class="hdr-title">turkcell.sql.ai.com.tr</div>
+        <div class="hdr-sub">Natural Language → SQL</div></div>
+        </div><div class="hdr-pill">v4.1 · Pipeline</div></div>''',
+        unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 1.4, 1])
+    with col2:
+        st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
+        st.markdown(
+            '''<div style="background:#fff;border:1px solid #DCE3ED;border-radius:14px;
+            padding:2rem 2.2rem;box-shadow:0 8px 30px rgba(0,0,0,.10);">
+            <div style="text-align:center;margin-bottom:1.5rem">
+            <div style="font-size:2rem">🔐</div>
+            <div style="font-size:1.1rem;font-weight:800;color:#003DA5;margin-top:.4rem">Giriş Yap</div>
+            <div style="font-size:.72rem;color:#9AA5B4;margin-top:.2rem">TURKCELL SQL AI</div>
+            </div>''',
+            unsafe_allow_html=True)
+
+        username = st.text_input("Kullanıcı Adı", placeholder="kullanici_adi", key="login_user")
+        password = st.text_input("Şifre", type="password", placeholder="••••••••", key="login_pw")
+
+        if st.button("⚡  Giriş Yap", key="login_btn"):
+            if username.strip() and password.strip():
+                user = db_login(username.strip(), password.strip())
+                if user:
+                    st.session_state.logged_in = True
+                    st.session_state.username  = user["username"]
+                    st.session_state.role      = user["role"]
+                    st.session_state.user_id   = user["id"]
+                    st.session_state.page      = "main"
+                    st.rerun()
+                else:
+                    st.error("❌ Kullanıcı adı veya şifre hatalı.")
+            else:
+                st.warning("Lütfen kullanıcı adı ve şifre girin.")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown(
+            '''<div style="text-align:center;margin-top:1rem;font-size:.65rem;color:#9AA5B4">
+            © 2026 turkcell.sql.ai.com.tr · L2 DevOps Operations
+            </div>''', unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  ADMİN PANELİ
+# ══════════════════════════════════════════════════════════════════════════
+def render_admin():
+    st.markdown(
+        f'''<div class="hdr"><div class="hdr-left">
+        <img class="hdr-logo" src="{LOGO_SRC}" alt="logo">
+        <div class="hdr-vline"></div>
+        <div><div class="hdr-title">turkcell.sql.ai.com.tr</div>
+        <div class="hdr-sub">Admin Paneli</div></div>
+        </div><div class="hdr-pill">⚡ Admin</div></div>''',
+        unsafe_allow_html=True)
+
+    tab1, tab2, tab3 = st.tabs(["👥 Kullanıcılar", "📜 Audit Log", "🗄️ Tüm Şemalar"])
+
+    # ── KULLANICILAR TAB ──────────────────────────────────────────────
+    with tab1:
+        st.markdown("#### Kullanıcı Listesi")
+        users = db_get_users()
+        for u in users:
+            active_badge = "🟢" if u["is_active"] else "🔴"
+            role_label   = ROLE_LABELS.get(u["role"], u["role"])
+            last = u["last_login"][:16] if u["last_login"] else "—"
+            col_a, col_b, col_c, col_d = st.columns([2.5, 1.5, 1.5, 1.5])
+            with col_a:
+                st.markdown(f"**{u['username']}** · {u['fullname']}")
+                st.caption(f"Son giriş: {last}")
+            with col_b:
+                st.markdown(f"{active_badge} {role_label}")
+            with col_c:
+                if u["username"] != "admin":
+                    new_state = 0 if u["is_active"] else 1
+                    lbl = "🔒 Devre Dışı" if u["is_active"] else "✅ Aktif Et"
+                    if st.button(lbl, key=f"tog_{u['id']}"):
+                        db_toggle_user(u["id"], new_state)
+                        st.rerun()
+            with col_d:
+                if u["username"] != "admin":
+                    if st.button("🗑 Sil", key=f"del_{u['id']}"):
+                        conn = get_db()
+                        conn.execute("DELETE FROM users WHERE id=?", (u["id"],))
+                        conn.commit(); conn.close()
+                        st.rerun()
+            st.divider()
+
+        st.markdown("#### ➕ Yeni Kullanıcı Ekle")
+        c1, c2 = st.columns(2)
+        with c1:
+            new_user = st.text_input("Kullanıcı Adı", key="nu_user")
+            new_full = st.text_input("Ad Soyad", key="nu_full")
+        with c2:
+            new_pw   = st.text_input("Şifre", type="password", key="nu_pw")
+            new_role = st.selectbox("Rol", ["viewer","analyst","dba","admin"], key="nu_role")
+        if st.button("➕ Kullanıcı Oluştur", key="create_user"):
+            if new_user and new_pw:
+                ok, msg = db_add_user(new_user, new_full, new_pw, new_role)
+                if ok: st.success(msg)
+                else:  st.error(msg)
+                st.rerun()
+
+    # ── AUDİT LOG TAB ────────────────────────────────────────────────
+    with tab2:
+        st.markdown("#### Tüm Sorgu Geçmişi (Audit Log)")
+        logs = db_get_all_history(200)
+        if not logs:
+            st.info("Henüz sorgu kaydı yok.")
+        else:
+            for entry in logs:
+                risk_col = {"SAFE":"🟢","RISKY":"🟡","INVALID":"🔴"}.get(entry.get("risk_level",""),"⚪")
+                kvkk_flag = "🔏" if entry.get("kvkk_hit") else ""
+                st.markdown(
+                    f'''<div class="hi">
+                    <div class="hp">{entry["prompt"]}</div>
+                    <div class="hm">{entry["created_at"][:16]} · 👤 {entry["username"]}
+                     · {entry["dialect"]} · {entry["sql_mode"]}
+                     · {risk_col} {entry.get("risk_level","")} {kvkk_flag}
+                     · {entry["tokens"]} tok · {entry.get("elapsed_sec",0):.1f}s</div>
+                    </div>''', unsafe_allow_html=True)
+
+    # ── ŞEMALAR TAB ───────────────────────────────────────────────────
+    with tab3:
+        st.markdown("#### Sistemdeki Tüm Şemalar")
+        schemas = db_get_schemas(None, "admin")
+        if not schemas:
+            st.info("Kayıtlı şema yok.")
+        for sch in schemas:
+            col_a, col_b = st.columns([4,1])
+            with col_a:
+                st.markdown(f"**{sch['name']}** · 👤 {sch['owner']} · {sch['table_count']} tablo")
+                st.caption(sch.get("description",""))
+            with col_b:
+                if st.button("🗑", key=f"del_sch_{sch['id']}"):
+                    db_delete_schema(sch["id"], None, "admin")
+                    st.rerun()
+            st.divider()
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -864,6 +1236,38 @@ def run_pipeline(prompt, key, dialect, style, model, schema=None, sql_mode="🔒
     }
 
 
+# ── auth guard ───────────────────────────────────────────────────────────────
+if not st.session_state.logged_in:
+    render_login()
+    st.stop()
+
+# ── nav bar (logout + admin) ─────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown(f"### 👤 {st.session_state.username}")
+    st.markdown(f"**Rol:** {ROLE_LABELS.get(st.session_state.role, st.session_state.role)}")
+    st.divider()
+    if st.session_state.role == "admin":
+        if st.button("⚡ Admin Paneli", key="goto_admin"):
+            st.session_state.page = "admin"
+            st.rerun()
+        if st.session_state.page == "admin":
+            if st.button("◀ Ana Sayfa", key="goto_main"):
+                st.session_state.page = "main"
+                st.rerun()
+    st.divider()
+    if st.button("🚪 Çıkış Yap", key="logout"):
+        for k in ["logged_in","username","role","user_id","page","history","qc","tt","lp"]:
+            st.session_state[k] = False if k=="logged_in" else ("main" if k=="page" else ([] if k=="history" else (0 if k in ["qc","tt"] else "")))
+        st.rerun()
+
+# Admin sayfası
+if st.session_state.page == "admin":
+    render_admin()
+    st.stop()
+
+# Rol bazlı SQL modu kısıtlaması
+_allowed_modes = ROLE_MODES.get(st.session_state.role, ["🔒 Read-Only"])
+
 # ── api key ───────────────────────────────────────────────────────────────────
 api_key = st.secrets.get("OPENAI_API_KEY", "")
 if not api_key:
@@ -892,7 +1296,7 @@ st.markdown(
     f'<div class="hdr-vline"></div>'
     f'<div><div class="hdr-title">turkcell.sql.ai.com.tr</div>'
     f'<div class="hdr-sub">Natural Language → SQL</div></div>'
-    f'</div><div class="hdr-pill">v4.1 · Pipeline</div></div>',
+    f'</div><div class="hdr-pill">👤 {st.session_state.username} · {ROLE_LABELS.get(st.session_state.role,"")}</div></div>',
     unsafe_allow_html=True)
 
 
@@ -927,6 +1331,24 @@ if uf:
                 f'<strong>{uf.name}</strong> yüklendi — {len(tbl_names)} tablo · {chars:,} karakter</div>'
                 + (f'<div class="tbl-row">{chips}</div>' if chips else ""),
                 unsafe_allow_html=True)
+            _sch_col1, _sch_col2 = st.columns([3,1])
+            with _sch_col1:
+                _sch_desc = st.text_input("Şema açıklaması (opsiyonel)", key="sch_desc", placeholder="CRM veritabanı, prod ortamı...")
+            with _sch_col2:
+                st.markdown("<div style='margin-top:1.7rem'></div>", unsafe_allow_html=True)
+                if st.button("💾 Şemayı Kaydet", key="save_schema"):
+                    db_save_schema(st.session_state.user_id, uf.name, _sch_desc, raw, len(tbl_names))
+                    st.success(f"✅ '{uf.name}' kaydedildi!")
+            # Kayıtlı şemalar
+            _saved = db_get_schemas(st.session_state.user_id, st.session_state.role)
+            if _saved:
+                _sel = st.selectbox("📂 Kayıtlı şema yükle", ["— Seç —"] + [s["name"] for s in _saved], key="sel_schema")
+                if _sel != "— Seç —":
+                    _found = next((s for s in _saved if s["name"]==_sel), None)
+                    if _found:
+                        schema_text = _found["content"]
+                        schema_meta = {"name":_found["name"],"tables":_found["table_count"],"chars":len(_found["content"])}
+                        st.success(f"✅ '{_sel}' yüklendi ({_found['table_count']} tablo)")
     except Exception as e:
         st.markdown(mk_alert("❌", "Dosya Hatası", f"Okunamadı: {e}"), unsafe_allow_html=True)
 
@@ -962,9 +1384,9 @@ with c3:
     model = st.selectbox("Model", ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"], key="m")
 with c4:
     sql_mode = st.selectbox("SQL Modu",
-        ["🔒 Read-Only", "✏️ Write (DML)", "🔧 DDL", "⚡ Full (Tamümü)"],
+        _allowed_modes,
         key="sql_mode",
-        help="🔒 Read-Only: SELECT · ✏️ Write: INSERT/UPDATE/DELETE · 🔧 DDL: CREATE/ALTER/DROP · ⚡ Full: kısıtsız")
+        help=f"Rolünüz ({st.session_state.role}): {len(_allowed_modes)} mod kullanılabilir")
 
 st.markdown('<div class="card-sep"></div>', unsafe_allow_html=True)
 
@@ -1019,13 +1441,22 @@ if go:
     # ── store history ─────────────────────────────────────────────────────
     st.session_state.qc += 1
     st.session_state.tt += res["tokens"]
+    _review = res.get("review",{})
+    _risk   = _review.get("status","") if _review else ""
+    _schema_nm = schema_meta.get("name","") if schema_text else ""
+    # SQLite audit log
+    db_log_query(
+        st.session_state.user_id, st.session_state.username,
+        prompt, res["sql"], dialect, style, sql_mode,
+        _schema_nm, res["tokens"], res["elapsed"], _risk, 0
+    )
     st.session_state.history.insert(0, {
         "prompt":  prompt,
         "sql":     res["sql"],
         "dialect": dialect,
         "ts":      datetime.datetime.now().strftime("%d %b %Y %H:%M"),
         "tokens":  res["tokens"],
-        "schema":  schema_meta.get("name", "—") if schema_text else "—",
+        "schema":  _schema_nm or "—",
     })
     st.session_state.history = st.session_state.history[:30]
 
