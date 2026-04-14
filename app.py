@@ -193,6 +193,25 @@ div[data-testid="stCopyButton"] button:hover{background:#89DCEB!important;color:
 .foot p{font-family:var(--sans);font-size:.60rem;color:var(--text-4);letter-spacing:.4px;margin:0;}
 .foot p+p{margin-top:.2rem;}
 .foot strong{color:var(--text-3);font-weight:600;}
+
+/* nav butonları */
+div[data-testid="column"]:nth-last-child(-n+2) .stButton>button {
+  background: rgba(255,255,255,.12) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,.25) !important;
+  border-radius: 6px !important;
+  font-size: .72rem !important;
+  padding: .3rem .6rem !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+div[data-testid="column"]:nth-last-child(-n+2) .stButton>button:hover {
+  background: rgba(255,255,255,.22) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -1241,24 +1260,7 @@ if not st.session_state.logged_in:
     render_login()
     st.stop()
 
-# ── nav bar (logout + admin) ─────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown(f"### 👤 {st.session_state.username}")
-    st.markdown(f"**Rol:** {ROLE_LABELS.get(st.session_state.role, st.session_state.role)}")
-    st.divider()
-    if st.session_state.role == "admin":
-        if st.button("⚡ Admin Paneli", key="goto_admin"):
-            st.session_state.page = "admin"
-            st.rerun()
-        if st.session_state.page == "admin":
-            if st.button("◀ Ana Sayfa", key="goto_main"):
-                st.session_state.page = "main"
-                st.rerun()
-    st.divider()
-    if st.button("🚪 Çıkış Yap", key="logout"):
-        for k in ["logged_in","username","role","user_id","page","history","qc","tt","lp"]:
-            st.session_state[k] = False if k=="logged_in" else ("main" if k=="page" else ([] if k=="history" else (0 if k in ["qc","tt"] else "")))
-        st.rerun()
+# ── nav bar → header altında render edilecek (aşağıda) ──────────────────────
 
 # Admin sayfası
 if st.session_state.page == "admin":
@@ -1290,6 +1292,7 @@ if not api_key:
 # ══════════════════════════════════════════════════════════════════════════
 #  HEADER
 # ══════════════════════════════════════════════════════════════════════════
+# Header HTML
 st.markdown(
     f'<div class="hdr"><div class="hdr-left">'
     f'<img class="hdr-logo" src="{LOGO_SRC}" alt="logo">'
@@ -1298,6 +1301,27 @@ st.markdown(
     f'<div class="hdr-sub">Natural Language → SQL</div></div>'
     f'</div><div class="hdr-pill">👤 {st.session_state.username} · {ROLE_LABELS.get(st.session_state.role,"")}</div></div>',
     unsafe_allow_html=True)
+
+# ── NAV BAR — header altında butonlar ───────────────────────────────────────
+_nc = st.columns([1, 1, 1, 1, 1])
+with _nc[4]:
+    if st.button("🚪 Çıkış", key="logout", use_container_width=True):
+        for k in ["logged_in","username","role","user_id","page","history","qc","tt","lp"]:
+            st.session_state[k] = False if k=="logged_in" else (
+                "main" if k=="page" else (
+                [] if k=="history" else (
+                0 if k in ["qc","tt"] else "")))
+        st.rerun()
+with _nc[3]:
+    if st.session_state.role == "admin":
+        if st.session_state.page == "admin":
+            if st.button("◀ Ana Sayfa", key="goto_main", use_container_width=True):
+                st.session_state.page = "main"
+                st.rerun()
+        else:
+            if st.button("⚡ Admin Paneli", key="goto_admin", use_container_width=True):
+                st.session_state.page = "admin"
+                st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════
