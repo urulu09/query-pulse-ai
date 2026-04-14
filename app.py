@@ -360,11 +360,23 @@ def db_get_all_history(limit=200):
 
 def db_save_schema(user_id, name, description, content, table_count):
     conn = get_db()
-    conn.execute("""
-        INSERT INTO schemas (user_id, name, description, content, table_count)
-        VALUES (?,?,?,?,?)
-    """, (user_id, name, description, content, table_count))
+    existing = conn.execute(
+        "SELECT id FROM schemas WHERE user_id=? AND name=?", (user_id, name)
+    ).fetchone()
+    if existing:
+        conn.execute("""
+            UPDATE schemas SET description=?, content=?, table_count=?,
+            created_at=datetime('now') WHERE id=?
+        """, (description, content, table_count, existing["id"]))
+        action = "güncellendi"
+    else:
+        conn.execute("""
+            INSERT INTO schemas (user_id, name, description, content, table_count)
+            VALUES (?,?,?,?,?)
+        """, (user_id, name, description, content, table_count))
+        action = "kaydedildi"
     conn.commit(); conn.close()
+    return action
 
 def db_get_schemas(user_id, role):
     conn = get_db()
@@ -555,6 +567,21 @@ def render_admin():
                         conn = get_db()
                         conn.execute("DELETE FROM users WHERE id=?", (u["id"],))
                         conn.commit(); conn.close(); st.rerun()
+
+            # Şifre sıfırlama (admin)
+            if u["username"] != "admin":
+                with st.expander(f"🔑 {u['username']} şifresini sıfırla", expanded=False):
+                    _rp_col1, _rp_col2 = st.columns([2,1])
+                    with _rp_col1:
+                        _reset_pw = st.text_input("Yeni şifre", key=f"rpw_{u['id']}", type="password")
+                    with _rp_col2:
+                        st.markdown("<div style='margin-top:1.7rem'></div>", unsafe_allow_html=True)
+                        if st.button("Güncelle", key=f"rset_{u['id']}"):
+                            if _reset_pw and len(_reset_pw) >= 6:
+                                db_change_password(u["id"], _reset_pw)
+                                st.success(f"✅ {u['username']} şifresi güncellendi.")
+                            else:
+                                st.error("En az 6 karakter girin.")
 
         # Yeni kullanıcı
         st.markdown(
@@ -1425,8 +1452,8 @@ if uf:
             with _sch_col2:
                 st.markdown("<div style='margin-top:1.7rem'></div>", unsafe_allow_html=True)
                 if st.button("💾 Şemayı Kaydet", key="save_schema"):
-                    db_save_schema(st.session_state.user_id, uf.name, _sch_desc, raw, len(tbl_names))
-                    st.success(f"✅ '{uf.name}' kaydedildi!")
+                    _action = db_save_schema(st.session_state.user_id, uf.name, _sch_desc, raw, len(tbl_names))
+                    st.success(f"✅ '{uf.name}' {_action}!")
             # Kayıtlı şemalar
             _saved = db_get_schemas(st.session_state.user_id, st.session_state.role)
             if _saved:
@@ -1671,26 +1698,88 @@ if go:
 
 
 # ══════════════════════════════════════════════════════════════════════════
-#  HISTORY
+#  HISTORY — DB'den kullanıcı bazlı
 # ══════════════════════════════════════════════════════════════════════════
-if st.session_state.history:
-    st.markdown('<div class="pdiv"></div>', unsafe_allow_html=True)
-    with st.expander(f"📜  Sorgu Geçmişi  ({len(st.session_state.history)} kayıt)", expanded=False):
-        for i, e in enumerate(st.session_state.history):
-            tag = f" · 🗄 {e['schema']}" if e.get("schema") and e["schema"] != "—" else ""
+_db_history = db_get_history(st.session_state.user_id, limit=50)
+_hist_count = len(_db_history)
+
+st.markdown('<div class="pdiv"></div>', unsafe_allow_html=True)
+with st.expander(f"📜  Sorgu Geçmişi  ({_hist_count} kayıt)", expanded=False):
+    if not _db_history:
+        st.info("Henüz sorgu geçmişi yok.")
+    else:
+        # Arama kutusu
+        _search = st.text_input("🔍 Geçmişte ara", placeholder="prompt veya SQL ara...",
+                                 key="hist_search", label_visibility="collapsed")
+        _filtered = [e for e in _db_history
+                     if not _search or _search.lower() in e["prompt"].lower()
+                     or _search.lower() in (e.get("sql_out") or "").lower()]
+
+        st.caption(f"{len(_filtered)} sonuç gösteriliyor")
+
+        for i, e in enumerate(_filtered):
+            tag       = f" · 🗄 {e['schema_name']}" if e.get("schema_name") else ""
+            risk_col  = {"SAFE":"#0D7F4D","RISKY":"#B45309","INVALID":"#B91C1C"}.get(
+                e.get("risk_level",""), "#9AA5B4")
+            risk_lbl  = e.get("risk_level","") or ""
+            kvkk_flag = " · 🔏" if e.get("kvkk_hit") else ""
+
             st.markdown(
-                f'<div class="hi"><div class="hp">{e["prompt"]}</div>'
-                f'<div class="hm">{e["ts"]} · {e["dialect"]}{tag} · {e["tokens"]} tok</div></div>',
+                f'<div class="hi">'
+                f'<div class="hp">{e["prompt"]}</div>'
+                f'<div class="hm">'
+                f'{e["created_at"][:16]} · {e.get("dialect","")}{tag}'
+                f' · <span style="color:{risk_col};font-weight:600">{risk_lbl}</span>'
+                f'{kvkk_flag} · {e.get("tokens",0)} tok'
+                f'</div></div>',
                 unsafe_allow_html=True)
-            st.code(e["sql"], language="sql")
-            st.markdown(dl(e["sql"]), unsafe_allow_html=True)
-            if i < len(st.session_state.history) - 1:
-                st.markdown('<div style="height:.15rem"></div>', unsafe_allow_html=True)
-        st.markdown('<div style="height:.25rem"></div>', unsafe_allow_html=True)
-        if st.button("🗑  Geçmişi Temizle", key="clr"):
+
+            if e.get("sql_out"):
+                st.code(e["sql_out"], language="sql")
+                st.markdown(dl(e["sql_out"]), unsafe_allow_html=True)
+
+            if i < len(_filtered) - 1:
+                st.markdown('<div style="height:.1rem"></div>', unsafe_allow_html=True)
+
+        st.markdown('<div style="height:.2rem"></div>', unsafe_allow_html=True)
+        if st.button("🗑  Oturum Geçmişini Temizle", key="clr"):
             st.session_state.update({"history": [], "qc": 0, "tt": 0})
             st.rerun()
 
+
+# ══════════════════════════════════════════════════════════════════════════
+#  ŞİFRE DEĞİŞTİRME — kullanıcı kendi şifresini değiştirebilir
+# ══════════════════════════════════════════════════════════════════════════
+st.markdown('<div class="pdiv"></div>', unsafe_allow_html=True)
+with st.expander("🔑  Şifremi Değiştir", expanded=False):
+    st.markdown(
+        "<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
+        "border-radius:10px;padding:1rem 1.2rem;margin-bottom:.5rem'>"
+        "<p style='font-size:.75rem;color:#003DA5;margin:0 0 .6rem;font-weight:600'>"
+        "Mevcut şifrenizi girin ve yeni şifrenizi belirleyin.</p></div>",
+        unsafe_allow_html=True)
+    _pw_col1, _pw_col2 = st.columns(2)
+    with _pw_col1:
+        _cur_pw  = st.text_input("Mevcut Şifre", type="password", key="cur_pw")
+        _new_pw  = st.text_input("Yeni Şifre", type="password", key="new_pw",
+                                  placeholder="min 6 karakter")
+    with _pw_col2:
+        _new_pw2 = st.text_input("Yeni Şifre (tekrar)", type="password", key="new_pw2")
+        st.markdown("<div style='margin-top:1.7rem'></div>", unsafe_allow_html=True)
+        if st.button("🔑 Şifremi Güncelle", key="change_pw"):
+            if not _cur_pw or not _new_pw or not _new_pw2:
+                st.warning("Tüm alanları doldurun.")
+            elif _new_pw != _new_pw2:
+                st.error("❌ Yeni şifreler eşleşmiyor.")
+            elif len(_new_pw) < 6:
+                st.error("❌ Şifre en az 6 karakter olmalı.")
+            else:
+                _user_check = db_login(st.session_state.username, _cur_pw)
+                if not _user_check:
+                    st.error("❌ Mevcut şifre hatalı.")
+                else:
+                    db_change_password(st.session_state.user_id, _new_pw)
+                    st.success("✅ Şifreniz güncellendi!")
 
 # ══════════════════════════════════════════════════════════════════════════
 #  FOOTER
