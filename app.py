@@ -496,96 +496,160 @@ def render_login():
 # ══════════════════════════════════════════════════════════════════════════
 def render_admin():
     st.markdown(
-        f'''<div class="hdr"><div class="hdr-left">
-        <img class="hdr-logo" src="{LOGO_SRC}" alt="logo">
-        <div class="hdr-vline"></div>
-        <div><div class="hdr-title">turkcell.sql.ai.com.tr</div>
-        <div class="hdr-sub">Admin Paneli</div></div>
-        </div><div class="hdr-pill">⚡ Admin</div></div>''',
+        f'<div class="hdr"><div class="hdr-left">'
+        f'<img class="hdr-logo" src="{LOGO_SRC}" alt="logo">'
+        f'<div class="hdr-vline"></div>'
+        f'<div><div class="hdr-title">turkcell.sql.ai.com.tr</div>'
+        f'<div class="hdr-sub">Admin Paneli</div></div>'
+        f'</div><div class="hdr-pill">⚡ Admin</div></div>',
         unsafe_allow_html=True)
+
+    # Ana sayfa butonu
+    if st.button("◀  Ana Sayfaya Dön", key="admin_back"):
+        st.session_state.page = "main"
+        st.rerun()
 
     tab1, tab2, tab3 = st.tabs(["👥 Kullanıcılar", "📜 Audit Log", "🗄️ Tüm Şemalar"])
 
-    # ── KULLANICILAR TAB ──────────────────────────────────────────────
+    # ── KULLANICILAR TAB ─────────────────────────────────────────────────────
     with tab1:
-        st.markdown("#### Kullanıcı Listesi")
+        # Kullanıcı listesi
+        st.markdown(
+            "<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
+            "letter-spacing:1.5px;text-transform:uppercase;margin:.8rem 0 .5rem'>👥 Kullanıcı Listesi</p>",
+            unsafe_allow_html=True)
+
         users = db_get_users()
         for u in users:
             active_badge = "🟢" if u["is_active"] else "🔴"
             role_label   = ROLE_LABELS.get(u["role"], u["role"])
             last = u["last_login"][:16] if u["last_login"] else "—"
-            col_a, col_b, col_c, col_d = st.columns([2.5, 1.5, 1.5, 1.5])
-            with col_a:
-                st.markdown(f"**{u['username']}** · {u['fullname']}")
-                st.caption(f"Son giriş: {last}")
-            with col_b:
-                st.markdown(f"{active_badge} {role_label}")
-            with col_c:
-                if u["username"] != "admin":
+            role_colors  = {"viewer":"#6B7A90","analyst":"#003DA5","dba":"#7C3AED","admin":"#B45309"}
+            rc = role_colors.get(u["role"],"#374151")
+
+            st.markdown(
+                f"<div style='background:#fff;border:1px solid #DCE3ED;border-radius:10px;"
+                f"padding:.7rem 1rem;margin-bottom:.4rem;"
+                f"display:flex;align-items:center;gap:.8rem'>"
+                f"<span style='font-size:1.1rem'>{active_badge}</span>"
+                f"<div style='flex:1'>"
+                f"<span style='font-weight:700;color:#0F1623;font-size:.9rem'>{u['username']}</span>"
+                f"<span style='color:#6B7A90;font-size:.82rem'> · {u['fullname']}</span><br>"
+                f"<span style='font-size:.68rem;color:#9AA5B4'>Son giriş: {last}</span>"
+                f"</div>"
+                f"<span style='background:{rc}18;color:{rc};border:1px solid {rc}44;"
+                f"border-radius:20px;padding:2px 10px;font-size:.68rem;font-weight:700'>"
+                f"{role_label}</span>"
+                f"</div>",
+                unsafe_allow_html=True)
+
+            if u["username"] != "admin":
+                _ca, _cb, _cc = st.columns([3, 1.2, 1.2])
+                with _cb:
                     new_state = 0 if u["is_active"] else 1
-                    lbl = "🔒 Devre Dışı" if u["is_active"] else "✅ Aktif Et"
-                    if st.button(lbl, key=f"tog_{u['id']}"):
-                        db_toggle_user(u["id"], new_state)
-                        st.rerun()
-            with col_d:
-                if u["username"] != "admin":
-                    if st.button("🗑 Sil", key=f"del_{u['id']}"):
+                    lbl = "🔒 Pasif" if u["is_active"] else "✅ Aktif"
+                    if st.button(lbl, key=f"tog_{u['id']}", use_container_width=True):
+                        db_toggle_user(u["id"], new_state); st.rerun()
+                with _cc:
+                    if st.button("🗑 Sil", key=f"del_{u['id']}", use_container_width=True):
                         conn = get_db()
                         conn.execute("DELETE FROM users WHERE id=?", (u["id"],))
-                        conn.commit(); conn.close()
-                        st.rerun()
-            st.divider()
+                        conn.commit(); conn.close(); st.rerun()
 
-        st.markdown("#### ➕ Yeni Kullanıcı Ekle")
+        # Yeni kullanıcı
+        st.markdown(
+            "<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
+            "letter-spacing:1.5px;text-transform:uppercase;margin:1.2rem 0 .5rem'>➕ Yeni Kullanıcı Ekle</p>",
+            unsafe_allow_html=True)
+
+        st.markdown(
+            "<div style='background:#F0F4FF;border:1px solid #BFDBFE;border-radius:12px;padding:1rem 1.2rem'>",
+            unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
-            new_user = st.text_input("Kullanıcı Adı", key="nu_user")
-            new_full = st.text_input("Ad Soyad", key="nu_full")
+            new_user = st.text_input("Kullanıcı Adı", key="nu_user",
+                placeholder="ornek_kullanici")
+            new_full = st.text_input("Ad Soyad", key="nu_full",
+                placeholder="Adı Soyadı")
         with c2:
-            new_pw   = st.text_input("Şifre", type="password", key="nu_pw")
-            new_role = st.selectbox("Rol", ["viewer","analyst","dba","admin"], key="nu_role")
-        if st.button("➕ Kullanıcı Oluştur", key="create_user"):
-            if new_user and new_pw:
-                ok, msg = db_add_user(new_user, new_full, new_pw, new_role)
-                if ok: st.success(msg)
-                else:  st.error(msg)
-                st.rerun()
+            new_pw   = st.text_input("Şifre", type="password", key="nu_pw",
+                placeholder="min 6 karakter")
+            new_role = st.selectbox("Rol", ["viewer","analyst","dba","admin"],
+                key="nu_role",
+                format_func=lambda r: ROLE_LABELS.get(r, r))
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    # ── AUDİT LOG TAB ────────────────────────────────────────────────
+        if st.button("➕ Kullanıcı Oluştur", key="create_user"):
+            if new_user.strip() and new_pw.strip():
+                ok, msg = db_add_user(new_user.strip(), new_full.strip(), new_pw, new_role)
+                if ok: st.success(f"✅ {msg}")
+                else:  st.error(f"❌ {msg}")
+                st.rerun()
+            else:
+                st.warning("Kullanıcı adı ve şifre zorunlu.")
+
+    # ── AUDİT LOG TAB ────────────────────────────────────────────────────────
     with tab2:
-        st.markdown("#### Tüm Sorgu Geçmişi (Audit Log)")
+        st.markdown(
+            "<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
+            "letter-spacing:1.5px;text-transform:uppercase;margin:.8rem 0 .5rem'>📜 Sorgu Audit Log</p>",
+            unsafe_allow_html=True)
         logs = db_get_all_history(200)
         if not logs:
             st.info("Henüz sorgu kaydı yok.")
         else:
+            st.caption(f"Toplam {len(logs)} kayıt")
             for entry in logs:
-                risk_col = {"SAFE":"🟢","RISKY":"🟡","INVALID":"🔴"}.get(entry.get("risk_level",""),"⚪")
-                kvkk_flag = "🔏" if entry.get("kvkk_hit") else ""
+                risk_col  = {"SAFE":"#0D7F4D","RISKY":"#B45309","INVALID":"#B91C1C"}.get(
+                    entry.get("risk_level",""), "#6B7A90")
+                risk_bg   = {"SAFE":"#EDFAF3","RISKY":"#FFFBEB","INVALID":"#FEF2F2"}.get(
+                    entry.get("risk_level",""), "#F5F7FA")
+                risk_lbl  = entry.get("risk_level","—") or "—"
+                kvkk_flag = "🔏 KVKK" if entry.get("kvkk_hit") else ""
                 st.markdown(
-                    f'''<div class="hi">
-                    <div class="hp">{entry["prompt"]}</div>
-                    <div class="hm">{entry["created_at"][:16]} · 👤 {entry["username"]}
-                     · {entry["dialect"]} · {entry["sql_mode"]}
-                     · {risk_col} {entry.get("risk_level","")} {kvkk_flag}
-                     · {entry["tokens"]} tok · {entry.get("elapsed_sec",0):.1f}s</div>
-                    </div>''', unsafe_allow_html=True)
+                    f"<div style='background:#fff;border:1px solid #DCE3ED;"
+                    f"border-left:3px solid {risk_col};border-radius:10px;"
+                    f"padding:.6rem 1rem;margin-bottom:.35rem'>"
+                    f"<div style='font-size:.82rem;font-weight:500;color:#0F1623;"
+                    f"margin-bottom:.2rem;white-space:nowrap;overflow:hidden;"
+                    f"text-overflow:ellipsis'>{entry['prompt']}</div>"
+                    f"<div style='display:flex;gap:.5rem;flex-wrap:wrap;align-items:center'>"
+                    f"<span style='font-size:.65rem;color:#6B7A90'>{entry['created_at'][:16]}</span>"
+                    f"<span style='font-size:.65rem;font-weight:600;color:#003DA5'>👤 {entry['username']}</span>"
+                    f"<span style='font-size:.65rem;color:#6B7A90'>{entry.get('dialect','')} · {entry.get('sql_mode','')}</span>"
+                    f"<span style='background:{risk_bg};color:{risk_col};border-radius:10px;"
+                    f"padding:1px 8px;font-size:.62rem;font-weight:700'>{risk_lbl}</span>"
+                    f"{'<span style=\"font-size:.62rem;color:#7C3AED\">'+kvkk_flag+'</span>' if kvkk_flag else ''}"
+                    f"<span style='font-size:.62rem;color:#9AA5B4'>{entry.get('tokens',0)} tok"
+                    f" · {entry.get('elapsed_sec',0):.1f}s</span>"
+                    f"</div></div>",
+                    unsafe_allow_html=True)
 
-    # ── ŞEMALAR TAB ───────────────────────────────────────────────────
+    # ── ŞEMALAR TAB ──────────────────────────────────────────────────────────
     with tab3:
-        st.markdown("#### Sistemdeki Tüm Şemalar")
+        st.markdown(
+            "<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
+            "letter-spacing:1.5px;text-transform:uppercase;margin:.8rem 0 .5rem'>🗄️ Kayıtlı Şemalar</p>",
+            unsafe_allow_html=True)
         schemas = db_get_schemas(None, "admin")
         if not schemas:
-            st.info("Kayıtlı şema yok.")
-        for sch in schemas:
-            col_a, col_b = st.columns([4,1])
-            with col_a:
-                st.markdown(f"**{sch['name']}** · 👤 {sch['owner']} · {sch['table_count']} tablo")
-                st.caption(sch.get("description",""))
-            with col_b:
-                if st.button("🗑", key=f"del_sch_{sch['id']}"):
-                    db_delete_schema(sch["id"], None, "admin")
-                    st.rerun()
-            st.divider()
+            st.info("Henüz kayıtlı şema yok.")
+        else:
+            for sch in schemas:
+                _sa, _sb = st.columns([5, 1])
+                with _sa:
+                    st.markdown(
+                        f"<div style='background:#fff;border:1px solid #DCE3ED;"
+                        f"border-radius:10px;padding:.6rem 1rem'>"
+                        f"<span style='font-weight:700;color:#003DA5'>{sch['name']}</span>"
+                        f"<span style='color:#6B7A90;font-size:.82rem'> · 👤 {sch['owner']}"
+                        f" · {sch['table_count']} tablo</span>"
+                        f"{'<br><span style=\"font-size:.75rem;color:#9AA5B4\">'+sch['description']+'</span>' if sch.get('description') else ''}"
+                        f"</div>",
+                        unsafe_allow_html=True)
+                with _sb:
+                    if st.button("🗑 Sil", key=f"del_sch_{sch['id']}", use_container_width=True):
+                        db_delete_schema(sch["id"], None, "admin"); st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════
