@@ -219,7 +219,8 @@ div[data-testid="column"]:nth-last-child(-n+2) .stButton>button:hover {
 # ── session state ─────────────────────────────────────────────────────────────
 for k, v in [("history",[]),("qc",0),("tt",0),("lp",""),
               ("logged_in",False),("username",""),("role",""),
-              ("user_id",None),("page","main")]:
+              ("user_id",None),("page","main"),
+              ("cache_hit",False),("last_res",None),("preview_sql","")]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -287,6 +288,52 @@ def init_db():
         )
     """)
 
+    conn.commit()
+
+    # Önbellek tablosu
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS query_cache (
+            cache_key   TEXT PRIMARY KEY,
+            prompt      TEXT,
+            result_json TEXT,
+            dialect     TEXT,
+            hit_count   INTEGER DEFAULT 1,
+            created_at  TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    # Şablon tablosu
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS templates (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            category    TEXT NOT NULL,
+            title       TEXT NOT NULL,
+            prompt      TEXT NOT NULL,
+            icon        TEXT DEFAULT '📋',
+            created_by  TEXT DEFAULT 'system',
+            created_at  TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+
+    # DB Bağlantıları tablosu
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS db_connections (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            name        TEXT NOT NULL,
+            db_type     TEXT NOT NULL DEFAULT 'postgresql',
+            host        TEXT DEFAULT '',
+            port        INTEGER DEFAULT 5432,
+            database    TEXT DEFAULT '',
+            username    TEXT DEFAULT '',
+            password    TEXT DEFAULT '',
+            is_active   INTEGER DEFAULT 1,
+            last_tested TEXT,
+            created_at  TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
     conn.commit()
 
     # Admin kullanıcı yoksa oluştur
@@ -434,6 +481,216 @@ def db_change_password(user_id, new_password):
     conn.execute("UPDATE users SET password_hash=? WHERE id=?", (_hash_pw(new_password), user_id))
     conn.commit(); conn.close()
 
+# ── ÖNBELLEK ──────────────────────────────────────────────────────────────
+def _cache_key(prompt, dialect, schema_content):
+    import hashlib
+    raw = f'{prompt.strip()}|{dialect}|{(schema_content or "")[:500]}'
+    return hashlib.md5(raw.encode()).hexdigest()
+
+def cache_get(key):
+    conn = get_db()
+    row = conn.execute("SELECT result_json FROM query_cache WHERE cache_key=?", (key,)).fetchone()
+    if row:
+        conn.execute("UPDATE query_cache SET hit_count=hit_count+1 WHERE cache_key=?", (key,))
+        conn.commit()
+    conn.close()
+    return json.loads(row['result_json']) if row else None
+
+def cache_set(key, prompt, result, dialect):
+    conn = get_db()
+    conn.execute("""
+        INSERT OR REPLACE INTO query_cache (cache_key,prompt,result_json,dialect)
+        VALUES (?,?,?,?)
+    """, (key, prompt, json.dumps(result), dialect))
+    conn.commit(); conn.close()
+
+# ── ŞABLONLAR ─────────────────────────────────────────────────────────────
+def templates_get():
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM templates ORDER BY category, title").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def templates_add(category, title, prompt, icon, created_by):
+    conn = get_db()
+    conn.execute("""
+        INSERT INTO templates (category,title,prompt,icon,created_by)
+        VALUES (?,?,?,?,?)
+    """, (category, title, prompt, icon, created_by))
+    conn.commit(); conn.close()
+
+def templates_delete(tid):
+    conn = get_db()
+    conn.execute("DELETE FROM templates WHERE id=?", (tid,))
+    conn.commit(); conn.close()
+
+# ── DB BAĞLANTI FONKSİYONLARI ───────────────────────────────────────────────
+def db_conn_save(user_id, name, db_type, host, port, database, uname, password):
+    conn = get_db()
+    existing = conn.execute(
+        'SELECT id FROM db_connections WHERE user_id=? AND name=?', (user_id, name)
+    ).fetchone()
+    if existing:
+        conn.execute("""
+            UPDATE db_connections SET db_type=?,host=?,port=?,database=?,
+            username=?,password=? WHERE id=?
+        """, (db_type, host, port, database, uname, password, existing['id']))
+    else:
+        conn.execute("""
+            INSERT INTO db_connections (user_id,name,db_type,host,port,database,username,password)
+            VALUES (?,?,?,?,?,?,?,?)
+        """, (user_id, name, db_type, host, port, database, uname, password))
+    conn.commit(); conn.close()
+
+def db_conn_list(user_id, role):
+    conn = get_db()
+    if role == 'admin':
+        rows = conn.execute("""
+            SELECT c.*, u.username as owner FROM db_connections c
+            JOIN users u ON c.user_id=u.id ORDER BY c.created_at DESC
+        """).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT c.*, u.username as owner FROM db_connections c
+            JOIN users u ON c.user_id=u.id WHERE c.user_id=? ORDER BY c.created_at DESC
+        """, (user_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def db_conn_delete(conn_id, user_id, role):
+    conn = get_db()
+    if role == 'admin':
+        conn.execute('DELETE FROM db_connections WHERE id=?', (conn_id,))
+    else:
+        conn.execute('DELETE FROM db_connections WHERE id=? AND user_id=?', (conn_id, user_id))
+    conn.commit(); conn.close()
+
+def db_conn_test(c):
+    """Bağlantıyı test et, (ok:bool, msg:str) döner."""
+    try:
+        if c['db_type'] == 'postgresql':
+            import psycopg2
+            cn = psycopg2.connect(host=c['host'],port=c['port'],
+                database=c['database'],user=c['username'],password=c['password'],
+                connect_timeout=5)
+            cur = cn.cursor()
+            # Şemayı çek
+            cur.execute("""
+                SELECT table_name, column_name, data_type
+                FROM information_schema.columns
+                WHERE table_schema='public'
+                ORDER BY table_name, ordinal_position
+            """)
+            rows = cur.fetchall()
+            cn.close()
+            return True, rows
+        elif c['db_type'] == 'mysql':
+            import pymysql
+            cn = pymysql.connect(host=c['host'],port=int(c['port']),
+                db=c['database'],user=c['username'],password=c['password'],
+                connect_timeout=5)
+            cur = cn.cursor()
+            cur.execute('SHOW TABLES')
+            rows = cur.fetchall()
+            cn.close()
+            return True, rows
+        elif c['db_type'] == 'sqlite':
+            import sqlite3 as _sl
+            cn = _sl.connect(c['database'])
+            cur = cn.cursor()
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            rows = cur.fetchall()
+            cn.close()
+            return True, rows
+        return False, [('Desteklenmeyen DB tipi',)]
+    except Exception as e:
+        return False, [(str(e),)]
+
+def schema_from_pg_rows(rows):
+    """information_schema satırlarından CREATE TABLE DDL üret."""
+    from collections import defaultdict
+    tables = defaultdict(list)
+    for tbl, col, dtype in rows:
+        tables[tbl].append(f'    {col} {dtype}')
+    lines = []
+    for tbl, cols in tables.items():
+        lines.append(f'CREATE TABLE {tbl} (')
+        lines.append(',\n'.join(cols))
+        lines.append(');\n')
+    return '\n'.join(lines)
+
+# ── DASHBOARD FONKSİYONLARI ──────────────────────────────────────────────────
+def dash_stats():
+    conn = get_db()
+    total_q    = conn.execute('SELECT COUNT(*) FROM query_log').fetchone()[0]
+    today_q    = conn.execute("SELECT COUNT(*) FROM query_log WHERE created_at>=date('now')").fetchone()[0]
+    week_q     = conn.execute("SELECT COUNT(*) FROM query_log WHERE created_at>=date('now','-7 days')").fetchone()[0]
+    total_u    = conn.execute('SELECT COUNT(*) FROM users WHERE is_active=1').fetchone()[0]
+    kvkk_q     = conn.execute('SELECT COUNT(*) FROM query_log WHERE kvkk_hit=1').fetchone()[0]
+    risky_q    = conn.execute("SELECT COUNT(*) FROM query_log WHERE risk_level='RISKY'").fetchone()[0]
+    invalid_q  = conn.execute("SELECT COUNT(*) FROM query_log WHERE risk_level='INVALID'").fetchone()[0]
+    cache_hits = conn.execute('SELECT SUM(hit_count)-COUNT(*) FROM query_cache').fetchone()[0] or 0
+    # Kullanıcı bazlı sorgu sayısı
+    by_user = conn.execute("""
+        SELECT username, COUNT(*) as cnt FROM query_log
+        GROUP BY username ORDER BY cnt DESC LIMIT 10
+    """).fetchall()
+    # Günlük sorgu (son 7 gün)
+    by_day = conn.execute("""
+        SELECT date(created_at) as day, COUNT(*) as cnt FROM query_log
+        WHERE created_at>=date('now','-7 days')
+        GROUP BY day ORDER BY day
+    """).fetchall()
+    # Risk dağılımı
+    by_risk = conn.execute("""
+        SELECT risk_level, COUNT(*) as cnt FROM query_log
+        WHERE risk_level != '' GROUP BY risk_level
+    """).fetchall()
+    # KVKK tetikleyen sorgular
+    kvkk_list = conn.execute("""
+        SELECT username, prompt, created_at FROM query_log
+        WHERE kvkk_hit=1 ORDER BY created_at DESC LIMIT 20
+    """).fetchall()
+    conn.close()
+    return {
+        'total_q': total_q, 'today_q': today_q, 'week_q': week_q,
+        'total_u': total_u, 'kvkk_q': kvkk_q, 'risky_q': risky_q,
+        'invalid_q': invalid_q, 'cache_hits': cache_hits,
+        'by_user': [dict(r) for r in by_user],
+        'by_day':  [dict(r) for r in by_day],
+        'by_risk': [dict(r) for r in by_risk],
+        'kvkk_list': [dict(r) for r in kvkk_list],
+    }
+
+def _seed_templates():
+    """Sistem şablonlarını bir kez yükle."""
+    conn = get_db()
+    count = conn.execute("SELECT COUNT(*) FROM templates").fetchone()[0]
+    conn.close()
+    if count > 0: return
+    defaults = [
+        ("📊 CRM",    "En fazla sipariş veren 10 müşteri",
+         "Son 3 ayda en fazla sipariş veren 10 müşteriyi sipariş sayısı ve toplam tutarıyla listele", "👥"),
+        ("📊 CRM",    "Yeni kayıt — sipariş vermemiş",
+         "Geçen ay kaydolan ama henüz sipariş vermemiş müşterileri referans kaynağına göre gruplandır", "🆕"),
+        ("💰 Finans", "Gecikmiş faturalar",
+         "Faturası 90 günü aşan abonelerin tarife bazında toplam borç tutarını göster", "⚠️"),
+        ("💰 Finans", "Tahsilat oranı",
+         "Geçen ay tarife bazında toplam fatura tutarı ve tahsilat oranını göster", "📈"),
+        ("📡 Telekom","Churn riski yüksek aboneler",
+         "Churn riski yüksek olan altın segment aboneleri son 3 aydaki müşteri hizmetleri araması ile birlikte listele", "🚨"),
+        ("📡 Telekom","Baz istasyonu arızaları",
+         "Son 30 günde en çok arıza bildirimi gelen 5 baz istasyonunu şehir ve teknoloji tipiyle listele", "📡"),
+        ("🔍 Denetim","KVKK onaysız aktif aboneler",
+         "KVKK onayı olmayan ama aktif olan abonelerin sayısını aktivasyon tarihi aralığına göre göster", "⚖️"),
+        ("🔍 Denetim","Segment bazlı gelir dağılımı",
+         "Aktif abonelerin segment ve tarife tipine göre dağılımını ve ortalama aylık ücretini göster", "📊"),
+    ]
+    for cat, title, prompt, icon in defaults:
+        templates_add(cat, title, prompt, icon, 'system')
+
+_seed_templates()
+
 # Rol → izin verilen SQL modları
 ROLE_MODES = {
     "viewer":  ["🔒 Read-Only"],
@@ -521,7 +778,7 @@ def render_admin():
         st.session_state.page = "main"
         st.rerun()
 
-    tab1, tab2, tab3 = st.tabs(["👥 Kullanıcılar", "📜 Audit Log", "🗄️ Tüm Şemalar"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["👥 Kullanıcılar", "📜 Audit Log", "🗄️ Tüm Şemalar", "📊 Dashboard", "🔌 DB Bağlantıları", "🔗 REST API"])
 
     # ── KULLANICILAR TAB ─────────────────────────────────────────────────────
     with tab1:
@@ -677,6 +934,263 @@ def render_admin():
                 with _sb:
                     if st.button("🗑 Sil", key=f"del_sch_{sch['id']}", use_container_width=True):
                         db_delete_schema(sch["id"], None, "admin"); st.rerun()
+
+    # ── DASHBOARD TAB ────────────────────────────────────────────────────────
+    with tab4:
+        st.markdown(
+            "<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
+            "letter-spacing:1.5px;text-transform:uppercase;margin:.8rem 0 .5rem'>📊 Kullanım Dashboard</p>",
+            unsafe_allow_html=True)
+        ds = dash_stats()
+
+        # ── Özet kartlar ─────────────────────────────────────────────────────
+        _dc1,_dc2,_dc3,_dc4,_dc5,_dc6 = st.columns(6)
+        for _col, _val, _lbl, _color in [
+            (_dc1, ds['total_q'],  'Toplam Sorgu',  '#003DA5'),
+            (_dc2, ds['today_q'],  'Bugün',         '#0D7F4D'),
+            (_dc3, ds['week_q'],   'Bu Hafta',      '#7C3AED'),
+            (_dc4, ds['kvkk_q'],   'KVKK Uyarısı', '#B91C1C'),
+            (_dc5, ds['risky_q'],  'Riskli Sorgu',  '#B45309'),
+            (_dc6, ds['cache_hits'],'Önbellek Hit', '#0891B2'),
+        ]:
+            with _col:
+                st.markdown(
+                    f"<div style='background:#fff;border:1px solid #DCE3ED;border-radius:10px;"
+                    f"padding:.7rem .8rem;text-align:center;border-top:3px solid {_color}'>"
+                    f"<div style='font-size:1.6rem;font-weight:800;color:{_color}'>{_val}</div>"
+                    f"<div style='font-size:.66rem;color:#9AA5B4;margin-top:.2rem'>{_lbl}</div>"
+                    f"</div>", unsafe_allow_html=True)
+
+        st.markdown('<div style="height:.8rem"></div>', unsafe_allow_html=True)
+
+        # ── Kullanıcı bazlı sorgu + Risk dağılımı ────────────────────────────
+        _dl, _dr = st.columns(2)
+        with _dl:
+            st.markdown(
+                "<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
+                "letter-spacing:1.2px;text-transform:uppercase;margin:.5rem 0'>👤 Kullanıcı Bazlı Sorgular</p>",
+                unsafe_allow_html=True)
+            for _u in ds['by_user']:
+                _pct = round(_u['cnt'] / ds['total_q'] * 100) if ds['total_q'] else 0
+                st.markdown(
+                    f"<div style='display:flex;align-items:center;gap:.6rem;margin-bottom:.35rem'>"
+                    f"<span style='font-size:.8rem;font-weight:600;color:#0F1623;min-width:90px'>"
+                    f"{_u['username']}</span>"
+                    f"<div style='flex:1;height:8px;background:#F1F5F9;border-radius:99px'>"
+                    f"<div style='width:{_pct}%;height:100%;background:#003DA5;border-radius:99px'></div>"
+                    f"</div>"
+                    f"<span style='font-size:.75rem;color:#6B7A90;min-width:32px;text-align:right'>"
+                    f"{_u['cnt']}</span></div>",
+                    unsafe_allow_html=True)
+
+        with _dr:
+            st.markdown(
+                "<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
+                "letter-spacing:1.2px;text-transform:uppercase;margin:.5rem 0'>🛡️ Risk Dağılımı</p>",
+                unsafe_allow_html=True)
+            _risk_colors = {'SAFE':'#0D7F4D','RISKY':'#B45309','INVALID':'#B91C1C'}
+            _total_risk  = sum(r['cnt'] for r in ds['by_risk']) or 1
+            for _r in ds['by_risk']:
+                _rc  = _risk_colors.get(_r['risk_level'],'#9AA5B4')
+                _pct = round(_r['cnt'] / _total_risk * 100)
+                st.markdown(
+                    f"<div style='display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem'>"
+                    f"<span style='background:{_rc}18;color:{_rc};border:1px solid {_rc}44;"
+                    f"border-radius:20px;padding:1px 10px;font-size:.65rem;font-weight:700;"
+                    f"min-width:72px;text-align:center'>{_r['risk_level']}</span>"
+                    f"<div style='flex:1;height:8px;background:#F1F5F9;border-radius:99px'>"
+                    f"<div style='width:{_pct}%;height:100%;background:{_rc};border-radius:99px'></div>"
+                    f"</div>"
+                    f"<span style='font-size:.75rem;color:#6B7A90;min-width:36px;text-align:right'>"
+                    f"{_r['cnt']} ({_pct}%)</span></div>",
+                    unsafe_allow_html=True)
+
+        st.markdown('<div style="height:.6rem"></div>', unsafe_allow_html=True)
+
+        # ── KVKK Uyarı Listesi ───────────────────────────────────────────────
+        if ds['kvkk_list']:
+            st.markdown(
+                "<p style='font-size:.65rem;font-weight:700;color:#B91C1C;"
+                "letter-spacing:1.2px;text-transform:uppercase;margin:.5rem 0'>🔏 Son KVKK Uyarıları</p>",
+                unsafe_allow_html=True)
+            for _kv in ds['kvkk_list']:
+                st.markdown(
+                    f"<div style='background:#FEF2F2;border-left:3px solid #B91C1C;"
+                    f"border-radius:8px;padding:.5rem .9rem;margin-bottom:.3rem'>"
+                    f"<span style='font-size:.8rem;font-weight:500;color:#0F1623'>{_kv['prompt']}</span>"
+                    f"<span style='font-size:.68rem;color:#9AA5B4;margin-left:.6rem'>"
+                    f"👤 {_kv['username']} · {str(_kv['created_at'])[:16]}</span></div>",
+                    unsafe_allow_html=True)
+
+        # ── Günlük trend (son 7 gün) ─────────────────────────────────────────
+        if ds['by_day']:
+            st.markdown(
+                "<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
+                "letter-spacing:1.2px;text-transform:uppercase;margin:.5rem 0'>📅 Son 7 Gün Sorgu Trendi</p>",
+                unsafe_allow_html=True)
+            _max_day = max(d['cnt'] for d in ds['by_day']) or 1
+            _bar_html = '<div style="display:flex;align-items:flex-end;gap:6px;height:80px">'
+            for _d in ds['by_day']:
+                _h = round(_d['cnt'] / _max_day * 72)
+                _bar_html += (
+                    f"<div style='display:flex;flex-direction:column;align-items:center;flex:1'>"
+                    f"<span style='font-size:.6rem;color:#6B7A90;margin-bottom:2px'>{_d['cnt']}</span>"
+                    f"<div style='width:100%;height:{_h}px;background:#003DA5;"
+                    f"border-radius:4px 4px 0 0'></div>"
+                    f"<span style='font-size:.58rem;color:#9AA5B4;margin-top:2px'>"
+                    f"{str(_d['day'])[5:]}</span></div>"
+                )
+            _bar_html += '</div>'
+            st.markdown(_bar_html, unsafe_allow_html=True)
+
+    # ── DB BAĞLANTILARI TAB ──────────────────────────────────────────────────
+    with tab5:
+        st.markdown(
+            "<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
+            "letter-spacing:1.5px;text-transform:uppercase;margin:.8rem 0 .5rem'>🔌 Veritabanı Bağlantıları</p>",
+            unsafe_allow_html=True)
+
+        # Mevcut bağlantılar
+        _conns = db_conn_list(st.session_state.user_id, st.session_state.role)
+        if not _conns:
+            st.info('Henüz bağlantı tanımlanmamış. Aşağıdan ekleyin.')
+        for _c in _conns:
+            _cca, _ccb, _ccc = st.columns([4, 1.2, 1.2])
+            with _cca:
+                st.markdown(
+                    f"<div style='background:#fff;border:1px solid #DCE3ED;"
+                    f"border-radius:10px;padding:.55rem 1rem'>"
+                    f"<span style='font-weight:700;color:#003DA5'>{_c['name']}</span>"
+                    f"<span style='color:#6B7A90;font-size:.8rem'> · {_c['db_type'].upper()}"
+                    f" · {_c['host']}:{_c['port']}/{_c['database']}</span>"
+                    f"<span style='font-size:.7rem;color:#9AA5B4'> · 👤 {_c.get('owner','')}</span>"
+                    f"</div>", unsafe_allow_html=True)
+            with _ccb:
+                if st.button('🔗 Test Et', key=f'test_{_c["id"]}', use_container_width=True):
+                    _ok, _rows = db_conn_test(_c)
+                    if _ok:
+                        # Şemayı otomatik oluştur ve kaydet
+                        if isinstance(_rows[0], tuple) and len(_rows[0]) == 3:
+                            _schema_str = schema_from_pg_rows(_rows)
+                            _tbl_count = len(set(r[0] for r in _rows))
+                            db_save_schema(
+                                st.session_state.user_id,
+                                f"{_c['name']}_auto",
+                                f"{_c['name']} — otomatik çekilen şema",
+                                _schema_str, _tbl_count
+                            )
+                            st.success(f'✅ Bağlantı başarılı! {_tbl_count} tablo bulundu. Şema otomatik kaydedildi.')
+                        else:
+                            st.success(f'✅ Bağlantı başarılı! {len(_rows)} tablo.')
+                        # Son test zamanını kaydet
+                        _cn2 = get_db()
+                        _cn2.execute("UPDATE db_connections SET last_tested=datetime('now') WHERE id=?", (_c['id'],))
+                        _cn2.commit(); _cn2.close()
+                        st.rerun()
+                    else:
+                        st.error(f'❌ {_rows[0][0] if _rows else "Bağlanamadı"}')
+            with _ccc:
+                if st.button('🗑 Sil', key=f'del_conn_{_c["id"]}', use_container_width=True):
+                    db_conn_delete(_c['id'], st.session_state.user_id, st.session_state.role)
+                    st.rerun()
+
+        # Yeni bağlantı formu
+        st.markdown(
+            "<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
+            "letter-spacing:1.5px;text-transform:uppercase;margin:1.2rem 0 .5rem'>➕ Yeni Bağlantı Ekle</p>",
+            unsafe_allow_html=True)
+        st.markdown(
+            "<div style='background:#F0F4FF;border:1px solid #BFDBFE;border-radius:12px;padding:1rem 1.2rem'>",
+            unsafe_allow_html=True)
+        _nc1, _nc2, _nc3 = st.columns(3)
+        with _nc1:
+            _cn_name = st.text_input('Bağlantı Adı', key='cn_name', placeholder='prod_crm')
+            _cn_type = st.selectbox('DB Tipi', ['postgresql','mysql','sqlite'], key='cn_type')
+        with _nc2:
+            _cn_host = st.text_input('Host', key='cn_host', placeholder='localhost')
+            _cn_port = st.number_input('Port', key='cn_port', value=5432, min_value=1, max_value=65535)
+        with _nc3:
+            _cn_db   = st.text_input('Veritabanı', key='cn_db', placeholder='mydb')
+            _cn_user = st.text_input('Kullanıcı', key='cn_user')
+        _cn_pw = st.text_input('Şifre', type='password', key='cn_pw')
+        st.markdown('</div>', unsafe_allow_html=True)
+        if st.button('💾 Bağlantıyı Kaydet', key='save_conn'):
+            if _cn_name and _cn_host and _cn_db:
+                db_conn_save(st.session_state.user_id, _cn_name, _cn_type,
+                             _cn_host, int(_cn_port), _cn_db, _cn_user, _cn_pw)
+                st.success(f'✅ "{_cn_name}" bağlantısı kaydedildi. Test Et butonuyla şemayı otomatik çek.')
+                st.rerun()
+            else:
+                st.warning('Bağlantı adı, host ve veritabanı zorunlu.')
+
+
+    # ── REST API TAB ────────────────────────────────────────────────────────
+    with tab6:
+        _lbl = "<p style='font-size:.65rem;font-weight:700;color:#003DA5;"\
+            "letter-spacing:1.5px;text-transform:uppercase;margin:.8rem 0 .5rem'"\
+            ">🔗 REST API Entegrasyonu</p>"
+        st.markdown(_lbl, unsafe_allow_html=True)
+
+        _api_token = st.secrets.get('API_TOKEN', '')
+        if not _api_token:
+            st.warning('API_TOKEN bulunamadı. secrets.toml dosyasına API_TOKEN ekleyin.')
+        else:
+            st.markdown(
+                "<div style='background:#EDFAF3;border:1px solid #A3DFBE;border-radius:8px;"
+                "padding:.55rem 1rem;font-size:.75rem;color:#0D7F4D;font-weight:600'>"
+                "✅ API Token aktif</div>", unsafe_allow_html=True)
+
+        _base = st.secrets.get('API_BASE_URL', 'https://turkcell.sql.ai.com.tr/api')
+        _tok  = _api_token or 'your-token'
+
+        st.markdown("<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
+            "letter-spacing:1.2px;text-transform:uppercase;margin:.8rem 0 .4rem'>"
+            "Endpoint Listesi</p>", unsafe_allow_html=True)
+
+        _ep_list = [
+            ('POST','/generate','SQL üret'),
+            ('GET', '/history', 'Geçmiş listele'),
+            ('GET', '/stats',   'İstatistik al'),
+            ('POST','/validate','SQL kontrol et'),
+        ]
+        _curl_map = {
+            '/generate': ('curl -X POST {b}/generate'  + chr(10)
+                         + '  -H "Authorization: Bearer {t}"' + chr(10)
+                         + '  -H "Content-Type: application/json"' + chr(10)
+                         + '  -d \'{"prompt":"Aktif aboneler","dialect":"PostgreSQL"}\''),
+            '/history':  ('curl -X GET {b}/history?limit=20' + chr(10)
+                         + '  -H "Authorization: Bearer {t}"'),
+            '/stats':    ('curl -X GET {b}/stats' + chr(10)
+                         + '  -H "Authorization: Bearer {t}"'),
+            '/validate': ('curl -X POST {b}/validate' + chr(10)
+                         + '  -H "Authorization: Bearer {t}"' + chr(10)
+                         + '  -H "Content-Type: application/json"' + chr(10)
+                         + '  -d \'{"sql":"SELECT * FROM subscribers","sql_mode":"Read-Only"}\''),
+        }
+        for _m, _p, _d in _ep_list:
+            _mc = '#0D7F4D' if _m == 'GET' else '#003DA5'
+            _mb = '#EDFAF3' if _m == 'GET' else '#EBF3FF'
+            with st.expander(_m + ' ' + _p + ' — ' + _d, expanded=False):
+                st.markdown(
+                    "<span style='background:" + _mb + ";color:" + _mc + ";"
+                    "border-radius:4px;padding:2px 8px;font-size:.72rem;font-weight:700'>"
+                    + _m + "</span> <code style='font-size:.8rem'>" + _base + _p + "</code>",
+                    unsafe_allow_html=True)
+                st.code(_curl_map[_p].format(b=_base, t=_tok), language='bash')
+
+        st.markdown("<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
+            "letter-spacing:1.2px;text-transform:uppercase;margin:.8rem 0 .4rem'>"
+            "Örnek Yanıt</p>", unsafe_allow_html=True)
+        _sample = '{"sql":"SELECT...","review":{"status":"SAFE"},"tokens":312,"cached":false}'
+        st.code(_sample, language='json')
+
+        st.markdown(
+            "<div style='background:#F0F4FF;border:1px solid #BFDBFE;border-radius:10px;"
+            "padding:.8rem 1.1rem;font-size:.78rem;color:#374151;line-height:1.8'>"
+            "<b>Slack:</b> /sql komutu → POST /generate → SQL kanala<br>"
+            "<b>Teams:</b> Power Automate → HTTP /generate → Adaptive Card<br>"
+            "<b>PG Advisor:</b> /generate → optimize pipeline</div>",
+            unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1421,6 +1935,29 @@ with _nc[3]:
 st.markdown('<div class="upload-card">', unsafe_allow_html=True)
 st.markdown('<p class="upload-lbl">📂 Veritabanı Şemasını Yükle (.sql, .txt)</p>', unsafe_allow_html=True)
 
+# ── Kayıtlı DB bağlantılarından şema yükle ──────────────────────────────────
+_saved_conns = db_conn_list(st.session_state.user_id, st.session_state.role)
+if _saved_conns:
+    _conn_names = [c["name"] for c in _saved_conns]
+    _sel_conn = st.selectbox(
+        "🔌 Kayıtlı bağlantıdan şema yükle",
+        ["— Elle yükle —"] + _conn_names,
+        key="sel_conn"
+    )
+    if _sel_conn != "— Elle yükle —":
+        _found_conn = next((c for c in _saved_conns if c["name"]==_sel_conn), None)
+        if _found_conn:
+            _saved_schemas = db_get_schemas(st.session_state.user_id, st.session_state.role)
+            _auto_schema = next((s for s in _saved_schemas if s["name"]==f"{_sel_conn}_auto"), None)
+            if _auto_schema:
+                schema_text = _auto_schema["content"]
+                schema_meta = {"name":_auto_schema["name"],
+                               "tables":_auto_schema["table_count"],
+                               "chars":len(_auto_schema["content"])}
+                st.success(f"✅ '{_sel_conn}' şeması yüklendi ({_auto_schema[chr(39)]}")
+            else:
+                st.warning("Bu bağlantı için henüz şema çekilmemiş. Admin Paneli → DB Bağlantıları → Test Et.")
+
 uf = st.file_uploader("sf", type=["sql", "txt"],
                       accept_multiple_files=False,
                       label_visibility="collapsed")
@@ -1511,6 +2048,44 @@ if schema_text:
         f'Şema Modu · {schema_meta["name"]} · {schema_meta["tables"]} tablo</div>',
         unsafe_allow_html=True)
 
+# ── ŞABLON SEÇİCİ ────────────────────────────────────────────────────────
+_tmpls = templates_get()
+if _tmpls:
+    _cats = sorted(set(t['category'] for t in _tmpls))
+    st.markdown('<p class="lbl">📋 Hazır Şablonlar</p>', unsafe_allow_html=True)
+    _tab_labels = _cats
+    _tabs = st.tabs(_tab_labels)
+    for _ti, _tab in enumerate(_tabs):
+        with _tab:
+            _cat_tmpls = [t for t in _tmpls if t['category'] == _cats[_ti]]
+            _tcols = st.columns(min(len(_cat_tmpls), 3))
+            for _ci, _t in enumerate(_cat_tmpls):
+                with _tcols[_ci % 3]:
+                    if st.button(
+                        f"{_t['icon']} {_t['title']}",
+                        key=f"tpl_{_t['id']}",
+                        use_container_width=True
+                    ):
+                        st.session_state.lp = _t['prompt']
+                        st.rerun()
+
+    if st.session_state.role == 'admin':
+        with st.expander('➕ Yeni Şablon Ekle', expanded=False):
+            _t_col1, _t_col2 = st.columns(2)
+            with _t_col1:
+                _t_cat   = st.text_input('Kategori', key='tc_cat', placeholder='📊 CRM')
+                _t_title = st.text_input('Başlık', key='tc_title')
+            with _t_col2:
+                _t_icon  = st.text_input('İkon', key='tc_icon', value='📋')
+                _t_save  = st.button('💾 Şablonu Kaydet', key='tc_save')
+            _t_prompt = st.text_area('Prompt', key='tc_prompt', height=80)
+            if _t_save:
+                if _t_cat and _t_title and _t_prompt:
+                    templates_add(_t_cat, _t_title, _t_prompt, _t_icon, st.session_state.username)
+                    st.success('✅ Şablon eklendi!'); st.rerun()
+
+st.markdown('<div class="card-sep"></div>', unsafe_allow_html=True)
+
 st.markdown('<p class="lbl">✦ Doğal Dil ile Açıkla</p>', unsafe_allow_html=True)
 prompt = st.text_area("p", value=st.session_state.lp, height=120,
     placeholder="Örn. → Geçen ay kaydolan ama henüz sipariş vermemiş kullanıcıları referans kaynağına göre gruplandır…",
@@ -1532,21 +2107,37 @@ if go:
             unsafe_allow_html=True)
         st.stop()
 
-    with st.spinner("Pipeline çalışıyor: Intent → SQL → Review…"):
-        try:
-            res = run_pipeline(prompt, api_key, dialect, style, model, schema_text, sql_mode)
-        except openai.AuthenticationError:
-            st.markdown(mk_alert("🔑", "Kimlik Hatası", "API anahtarı reddedildi."),
-                unsafe_allow_html=True); st.stop()
-        except openai.RateLimitError:
-            st.markdown(mk_alert("⏱", "Limit Aşıldı", "OpenAI kotası doldu. Kısa süre bekleyip tekrar deneyin."),
-                unsafe_allow_html=True); st.stop()
-        except openai.APIConnectionError:
-            st.markdown(mk_alert("🌐", "Bağlantı Hatası", "OpenAI API'ye ulaşılamadı."),
-                unsafe_allow_html=True); st.stop()
-        except Exception as e:
-            st.markdown(mk_alert("⚙️", "Beklenmeyen Hata", f"Sorun oluştu:<br><code>{e}</code>"),
-                unsafe_allow_html=True); st.stop()
+    # ── Önbellek kontrolü ─────────────────────────────────────────────────
+    _ck  = _cache_key(prompt, dialect, schema_text)
+    _cached = cache_get(_ck)
+    if _cached:
+        res = _cached
+        st.session_state.cache_hit = True
+        st.markdown(
+            '<div style="background:#EDFAF3;border:1px solid #A3DFBE;border-radius:8px;'
+            'padding:.45rem 1rem;margin:.4rem 0;font-size:.76rem;color:#0D7F4D;font-weight:600">'
+            '⚡ Önbellekten yüklendi — API çağrısı yapılmadı</div>',
+            unsafe_allow_html=True)
+    else:
+        st.session_state.cache_hit = False
+    if not _cached:
+     with st.spinner("Pipeline çalışıyor: Intent → SQL → Review…"):
+      try:
+        res = run_pipeline(prompt, api_key, dialect, style, model, schema_text, sql_mode)
+      except openai.AuthenticationError:
+        st.markdown(mk_alert("🔑", "Kimlik Hatası", "API anahtarı reddedildi."),
+            unsafe_allow_html=True); st.stop()
+      except openai.RateLimitError:
+        st.markdown(mk_alert("⏱", "Limit Aşıldı", "OpenAI kotası doldu. Kısa süre bekleyip tekrar deneyin."),
+            unsafe_allow_html=True); st.stop()
+      except openai.APIConnectionError:
+        st.markdown(mk_alert("🌐", "Bağlantı Hatası", "OpenAI API'ye ulaşılamadı."),
+            unsafe_allow_html=True); st.stop()
+      except Exception as e:
+        st.markdown(mk_alert("⚙️", "Beklenmeyen Hata", f"Sorun oluştu:<br><code>{e}</code>"),
+            unsafe_allow_html=True); st.stop()
+     # Önbelleğe kaydet
+     cache_set(_ck, prompt, res, dialect)
 
     valid, err = chk(res["sql"], sql_mode)
     if not valid:
@@ -1640,6 +2231,55 @@ if go:
         st.code(res["sql"], language="sql")
     with col_dl:
         st.markdown(dl(res["sql"]), unsafe_allow_html=True)
+
+    # ── SONUÇ ÖNİZLEME ───────────────────────────────────────────────────
+    _preview_db = st.secrets.get('PREVIEW_DB_URL', '')
+    if _preview_db or st.secrets.get('PREVIEW_DB_TYPE',''):
+        with st.expander('▶  Sorgu Sonuçlarını Önizle (ilk 50 satır)', expanded=False):
+            if st.button('🔄 Sorguyu Çalıştır', key='run_preview'):
+                try:
+                    _db_type = st.secrets.get('PREVIEW_DB_TYPE','sqlite')
+                    if _db_type == 'sqlite':
+                        import sqlite3 as _sqlite
+                        _pconn = _sqlite.connect(st.secrets.get('PREVIEW_DB_PATH', DB_PATH))
+                        _pdf = __import__('pandas').read_sql_query(
+                            res['sql'] + (' LIMIT 50' if 'LIMIT' not in res['sql'].upper() else ''),
+                            _pconn)
+                        _pconn.close()
+                    elif _db_type == 'postgresql':
+                        import psycopg2, pandas as _pd
+                        _pconn = psycopg2.connect(_preview_db)
+                        _pdf = _pd.read_sql_query(
+                            res['sql'] + (' LIMIT 50' if 'LIMIT' not in res['sql'].upper() else ''),
+                            _pconn)
+                        _pconn.close()
+                    else:
+                        st.warning('Desteklenmeyen DB tipi. PREVIEW_DB_TYPE: sqlite veya postgresql')
+                        _pdf = None
+
+                    if _pdf is not None:
+                        st.markdown(
+                            f'<div style="font-size:.72rem;color:#0D7F4D;font-weight:600;'
+                            f'margin-bottom:.4rem">✅ {len(_pdf)} satır döndü</div>',
+                            unsafe_allow_html=True)
+                        st.dataframe(_pdf, use_container_width=True)
+                        # CSV indir
+                        _csv = _pdf.to_csv(index=False).encode('utf-8')
+                        _csv_b64 = b64lib.b64encode(_csv).decode()
+                        _ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                        st.markdown(
+                            f'<div class="dl-wrap"><a href="data:file/csv;base64,{_csv_b64}"'
+                            f' download="result_{_ts}.csv">📥 CSV İndir</a></div>',
+                            unsafe_allow_html=True)
+                except Exception as _pe:
+                    st.error(f'❌ Sorgu hatası: {_pe}')
+    else:
+        st.markdown(
+            '<div style="background:#F5F7FA;border:1px solid #DCE3ED;border-radius:8px;'
+            'padding:.45rem 1rem;margin:.4rem 0;font-size:.74rem;color:#9AA5B4">'
+            '💡 Sonuç önizleme için <code>secrets.toml</code> dosyasına '
+            '<code>PREVIEW_DB_TYPE</code> ve bağlantı bilgilerini ekleyin.</div>',
+            unsafe_allow_html=True)
 
     # ── REVIEW CARD ──────────────────────────────────────────────────────
     review = res.get("review", {})
