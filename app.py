@@ -689,8 +689,6 @@ def _seed_templates():
     for cat, title, prompt, icon in defaults:
         templates_add(cat, title, prompt, icon, 'system')
 
-_seed_templates()
-
 # Rol → izin verilen SQL modları
 ROLE_MODES = {
     "viewer":  ["🔒 Read-Only"],
@@ -705,8 +703,9 @@ ROLE_LABELS = {
     "admin":   "⚡ Admin",
 }
 
-# DB başlat
+# DB başlat → önce tablolar oluşsun, sonra seed
 init_db()
+_seed_templates()
 
 
 # ══════════════════════════════════════════════════════════════════════════
