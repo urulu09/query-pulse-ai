@@ -635,22 +635,26 @@ def dash_stats():
         SELECT username, COUNT(*) as cnt FROM query_log
         GROUP BY username ORDER BY cnt DESC LIMIT 10
     """).fetchall()
+    by_user = [{'username': r[0], 'cnt': r[1]} for r in by_user]
     # Günlük sorgu (son 7 gün)
     by_day = conn.execute("""
         SELECT date(created_at) as day, COUNT(*) as cnt FROM query_log
         WHERE created_at>=date('now','-7 days')
         GROUP BY day ORDER BY day
     """).fetchall()
+    by_day = [{'day': r[0], 'cnt': r[1]} for r in by_day]
     # Risk dağılımı
     by_risk = conn.execute("""
         SELECT risk_level, COUNT(*) as cnt FROM query_log
         WHERE risk_level != '' GROUP BY risk_level
     """).fetchall()
+    by_risk = [{'risk_level': r[0], 'cnt': r[1]} for r in by_risk]
     # KVKK tetikleyen sorgular
     kvkk_list = conn.execute("""
         SELECT username, prompt, created_at FROM query_log
         WHERE kvkk_hit=1 ORDER BY created_at DESC LIMIT 20
     """).fetchall()
+    kvkk_list = [{'username': r[0], 'prompt': r[1], 'created_at': r[2]} for r in kvkk_list]
     conn.close()
     return {
         'total_q': total_q, 'today_q': today_q, 'week_q': week_q,
@@ -970,16 +974,17 @@ def render_admin():
                 "letter-spacing:1.2px;text-transform:uppercase;margin:.5rem 0'>👤 Kullanıcı Bazlı Sorgular</p>",
                 unsafe_allow_html=True)
             for _u in ds['by_user']:
-                _pct = round(_u['cnt'] / ds['total_q'] * 100) if ds['total_q'] else 0
+                _cnt = _u.get('cnt', _u.get('COUNT(*)', 0))
+                _pct = round(_cnt / ds['total_q'] * 100) if ds['total_q'] else 0
                 st.markdown(
                     f"<div style='display:flex;align-items:center;gap:.6rem;margin-bottom:.35rem'>"
                     f"<span style='font-size:.8rem;font-weight:600;color:#0F1623;min-width:90px'>"
-                    f"{_u['username']}</span>"
+                    f"{_u.get('username','?')}</span>"
                     f"<div style='flex:1;height:8px;background:#F1F5F9;border-radius:99px'>"
                     f"<div style='width:{_pct}%;height:100%;background:#003DA5;border-radius:99px'></div>"
                     f"</div>"
                     f"<span style='font-size:.75rem;color:#6B7A90;min-width:32px;text-align:right'>"
-                    f"{_u['cnt']}</span></div>",
+                    f"{_cnt}</span></div>",
                     unsafe_allow_html=True)
 
         with _dr:
@@ -990,8 +995,9 @@ def render_admin():
             _risk_colors = {'SAFE':'#0D7F4D','RISKY':'#B45309','INVALID':'#B91C1C'}
             _total_risk  = sum(r['cnt'] for r in ds['by_risk']) or 1
             for _r in ds['by_risk']:
-                _rc  = _risk_colors.get(_r['risk_level'],'#9AA5B4')
-                _pct = round(_r['cnt'] / _total_risk * 100)
+                _rcnt = _r.get('cnt', _r.get('COUNT(*)', 0))
+                _rc  = _risk_colors.get(_r.get('risk_level',''),'#9AA5B4')
+                _pct = round(_rcnt / _total_risk * 100)
                 st.markdown(
                     f"<div style='display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem'>"
                     f"<span style='background:{_rc}18;color:{_rc};border:1px solid {_rc}44;"
@@ -1001,7 +1007,7 @@ def render_admin():
                     f"<div style='width:{_pct}%;height:100%;background:{_rc};border-radius:99px'></div>"
                     f"</div>"
                     f"<span style='font-size:.75rem;color:#6B7A90;min-width:36px;text-align:right'>"
-                    f"{_r['cnt']} ({_pct}%)</span></div>",
+                    f"{_rcnt} ({_pct}%)</span></div>",
                     unsafe_allow_html=True)
 
         st.markdown('<div style="height:.6rem"></div>', unsafe_allow_html=True)
@@ -1016,9 +1022,9 @@ def render_admin():
                 st.markdown(
                     f"<div style='background:#FEF2F2;border-left:3px solid #B91C1C;"
                     f"border-radius:8px;padding:.5rem .9rem;margin-bottom:.3rem'>"
-                    f"<span style='font-size:.8rem;font-weight:500;color:#0F1623'>{_kv['prompt']}</span>"
+                    f"<span style='font-size:.8rem;font-weight:500;color:#0F1623'>{_kv.get('prompt','')}</span>"
                     f"<span style='font-size:.68rem;color:#9AA5B4;margin-left:.6rem'>"
-                    f"👤 {_kv['username']} · {str(_kv['created_at'])[:16]}</span></div>",
+                    f"👤 {_kv.get('username','?')} · {str(_kv.get('created_at',''))[:16]}</span></div>",
                     unsafe_allow_html=True)
 
         # ── Günlük trend (son 7 gün) ─────────────────────────────────────────
@@ -1027,17 +1033,18 @@ def render_admin():
                 "<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
                 "letter-spacing:1.2px;text-transform:uppercase;margin:.5rem 0'>📅 Son 7 Gün Sorgu Trendi</p>",
                 unsafe_allow_html=True)
-            _max_day = max(d['cnt'] for d in ds['by_day']) or 1
+            _max_day = max(d.get('cnt', d.get('COUNT(*)',0)) for d in ds['by_day']) or 1
             _bar_html = '<div style="display:flex;align-items:flex-end;gap:6px;height:80px">'
             for _d in ds['by_day']:
-                _h = round(_d['cnt'] / _max_day * 72)
+                _dcnt = _d.get('cnt', _d.get('COUNT(*)',0))
+                _h = round(_dcnt / _max_day * 72)
                 _bar_html += (
                     f"<div style='display:flex;flex-direction:column;align-items:center;flex:1'>"
-                    f"<span style='font-size:.6rem;color:#6B7A90;margin-bottom:2px'>{_d['cnt']}</span>"
+                    f"<span style='font-size:.6rem;color:#6B7A90;margin-bottom:2px'>{_dcnt}</span>"
                     f"<div style='width:100%;height:{_h}px;background:#003DA5;"
                     f"border-radius:4px 4px 0 0'></div>"
                     f"<span style='font-size:.58rem;color:#9AA5B4;margin-top:2px'>"
-                    f"{str(_d['day'])[5:]}</span></div>"
+                    f"{str(_d.get('day',''))[5:]}</span></div>"
                 )
             _bar_html += '</div>'
             st.markdown(_bar_html, unsafe_allow_html=True)
@@ -1131,16 +1138,23 @@ def render_admin():
         st.markdown(_lbl, unsafe_allow_html=True)
 
         _api_token = st.secrets.get('API_TOKEN', '')
+        _base = st.secrets.get('API_BASE_URL', 'https://turkcell.sql.ai.com.tr/api')
+        _tok  = _api_token if _api_token else 'YOUR-TOKEN-HERE'
         if not _api_token:
-            st.warning('API_TOKEN bulunamadı. secrets.toml dosyasına API_TOKEN ekleyin.')
+            st.markdown(
+                "<div style='background:#FFFBEB;border:1px solid #FDE68A;"
+                "border-left:3px solid #D97706;border-radius:8px;"
+                "padding:.55rem 1rem;font-size:.75rem;color:#92400E'>"
+                "⚠️ API_TOKEN tanımlı değil. Aşağıdaki curl örnekleri placeholder ile gösteriliyor."
+                "<br><code>secrets.toml</code> dosyasına "
+                "<code>API_TOKEN = \"sk-...\"</code> ekleyin."
+                "</div>", unsafe_allow_html=True)
         else:
             st.markdown(
                 "<div style='background:#EDFAF3;border:1px solid #A3DFBE;border-radius:8px;"
                 "padding:.55rem 1rem;font-size:.75rem;color:#0D7F4D;font-weight:600'>"
-                "✅ API Token aktif</div>", unsafe_allow_html=True)
-
-        _base = st.secrets.get('API_BASE_URL', 'https://turkcell.sql.ai.com.tr/api')
-        _tok  = _api_token or 'your-token'
+                "✅ API Token aktif — Endpointler kullanıma hazır</div>",
+                unsafe_allow_html=True)
 
         st.markdown("<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
             "letter-spacing:1.2px;text-transform:uppercase;margin:.8rem 0 .4rem'>"
