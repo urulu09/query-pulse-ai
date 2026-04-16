@@ -1189,7 +1189,10 @@ def render_admin():
                     "border-radius:4px;padding:2px 8px;font-size:.72rem;font-weight:700'>"
                     + _m + "</span> <code style='font-size:.8rem'>" + _base + _p + "</code>",
                     unsafe_allow_html=True)
-                st.code(_curl_map[_p].format(b=_base, t=_tok), language='bash')
+                _curl_text = _curl_map.get(_p, "# Bu endpoint için örnek yok")
+                # Token ve base url'yi string birleştirme ile yerleştir
+                _curl_text = _curl_text.replace("{b}", _base).replace("{t}", _tok)
+                st.code(_curl_text, language="bash")
 
         st.markdown("<p style='font-size:.65rem;font-weight:700;color:#003DA5;"
             "letter-spacing:1.2px;text-transform:uppercase;margin:.8rem 0 .4rem'>"
