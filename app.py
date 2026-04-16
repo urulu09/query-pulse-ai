@@ -1948,6 +1948,35 @@ with _nc[3]:
 # ══════════════════════════════════════════════════════════════════════════
 #  UPLOAD CARD
 # ══════════════════════════════════════════════════════════════════════════
+# ── KİŞİSEL ÖNERİ MOTORU ───────────────────────────────────────────────────
+_rec_history = db_get_history(st.session_state.user_id, limit=30)
+if _rec_history:
+    # En sık tekrarlanan prompt'ları bul
+    from collections import Counter
+    _prompt_counts = Counter(e['prompt'] for e in _rec_history)
+    _top_prompts   = [p for p,c in _prompt_counts.most_common(3) if c >= 2]
+    # Son 24 saatte sorulmamış önerileri göster
+    import datetime as _dt
+    _yesterday = (_dt.datetime.now() - _dt.timedelta(days=1)).strftime('%Y-%m-%d %H:%M')
+    _recent    = {e['prompt'] for e in _rec_history if e.get('created_at','') > _yesterday}
+    _suggestions = [p for p in _top_prompts if p not in _recent]
+    if _suggestions:
+        st.markdown(
+            "<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
+            "border-left:3px solid #003DA5;border-radius:10px;"
+            "padding:.7rem 1rem;margin-bottom:.8rem'>"
+            "<span style='font-size:.65rem;font-weight:700;color:#003DA5;"
+            "letter-spacing:1.2px;text-transform:uppercase'>🧠 Sık Kullandıklarınız</span>",
+            unsafe_allow_html=True)
+        _sug_cols = st.columns(len(_suggestions))
+        for _si, _sug in enumerate(_suggestions):
+            with _sug_cols[_si]:
+                _short = _sug[:45] + '…' if len(_sug) > 45 else _sug
+                if st.button(f'🔁 {_short}', key=f'sug_{_si}', use_container_width=True):
+                    st.session_state.lp = _sug
+                    st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
 st.markdown('<div class="upload-card">', unsafe_allow_html=True)
 st.markdown('<p class="upload-lbl">📂 Veritabanı Şemasını Yükle (.sql, .txt)</p>', unsafe_allow_html=True)
 
@@ -2287,6 +2316,47 @@ if go:
                             f'<div class="dl-wrap"><a href="data:file/csv;base64,{_csv_b64}"'
                             f' download="result_{_ts}.csv">📥 CSV İndir</a></div>',
                             unsafe_allow_html=True)
+
+                        # ── DOĞAL DİL YORUM ─────────────────────────────────
+                        if st.button('📊 Veriyi Türkçe Yorumla', key='interpret_data'):
+                            _interpret_prompt = (
+                                'Aşağıdaki SQL sorgu sonucunu bir iş analistine '
+                                'açıklar gibi Türkçe, kısa ve net yorumla.\n'
+                                'Önemli trendleri, dikkat çekici değerleri ve '
+                                'önerileri madde madde yaz. Maks 5 madde.\n\n'
+                                f'Sorgu: {prompt}\n\n'
+                                f'Sonuç (ilk 10 satır):\n'
+                                + _pdf.head(10).to_string(index=False)
+                            )
+                            with st.spinner('Veri yorumlanıyor…'):
+                                try:
+                                    _ic = openai.OpenAI(api_key=api_key)
+                                    _ir = _ic.chat.completions.create(
+                                        model=model,
+                                        max_tokens=600,
+                                        messages=[
+                                            {'role':'system','content':'Sen Turkcell için çalışan kıdemli bir veri analistisin. Verileri Türkçe, net ve iş odaklı yorumla.'},
+                                            {'role':'user','content':_interpret_prompt}
+                                        ]
+                                    )
+                                    _interp = _ir.choices[0].message.content
+                                    st.markdown(
+                                        "<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
+                                        "border-left:3px solid #003DA5;border-radius:10px;"
+                                        "padding:.8rem 1.1rem;margin-top:.6rem'>"
+                                        "<div style='font-size:.65rem;font-weight:700;color:#003DA5;"
+                                        "letter-spacing:1.2px;text-transform:uppercase;margin-bottom:.5rem'>"
+                                        "📊 Veri Yorumu</div>"
+                                        + ''.join(
+                                            f"<div style='display:flex;gap:.5rem;margin-bottom:.35rem'>"
+                                            f"<span style='color:#003DA5;flex-shrink:0'>•</span>"
+                                            f"<span style='font-size:.82rem;color:#374151'>{ln.lstrip('•-– ').strip()}</span></div>"
+                                            for ln in _interp.split('\n') if ln.strip()
+                                        )
+                                        + "</div>",
+                                        unsafe_allow_html=True)
+                                except Exception as _iie:
+                                    st.error(f'Yorum hatası: {_iie}')
                 except Exception as _pe:
                     st.error(f'❌ Sorgu hatası: {_pe}')
     else:
@@ -2352,6 +2422,45 @@ if go:
             f'<ul>{bullets_rich}</ul></div>',
             unsafe_allow_html=True)
 
+
+    # ── OTOMATİK SORGU İYİLEŞTİRME ──────────────────────────────────────────
+    _review_status = res.get('review', {}).get('status', 'SAFE') if res.get('review') else 'SAFE'
+    if _review_status in ('RISKY', 'INVALID'):
+        st.markdown(
+            "<div style='background:#FFFBEB;border:1px solid #FDE68A;"
+            "border-left:3px solid #D97706;border-radius:10px;"
+            "padding:.7rem 1rem;margin:.6rem 0;display:flex;align-items:center;gap:.8rem'>"
+            "<span style='font-size:.8rem;color:#92400E'>"
+            "⚠️ Bu sorgunun risk skoru yüksek. Sistem daha güvenli bir versiyon üretebilir.</span>",
+            unsafe_allow_html=True)
+        if st.button('🔄  Daha Güvenli Versiyon Üret', key='improve_sql'):
+            _improve_prompt = (
+                'Aşağıdaki SQL sorgusunu daha güvenli hale getir.\n'
+                'Kurallar:\n'
+                '- SELECT * varsa sütunları açıkça yaz\n'
+                '- WHERE filtresi eksikse ekle\n'
+                '- İç içe SELECT varsa CTE ile yeniden yaz\n'
+                '- Orijinal iş mantığını koru\n\n'
+                f'Orijinal prompt: {prompt}\n\n'
+                f'Mevcut SQL:\n{res["sql"]}'
+            )
+            with st.spinner('Güvenli versiyon üretiliyor…'):
+                try:
+                    _imp_res = run_pipeline(
+                        _improve_prompt, api_key, dialect, style, model, schema_text, sql_mode
+                    )
+                    if _imp_res.get('sql'):
+                        st.markdown(
+                            "<div style='background:#EDFAF3;border:1px solid #A3DFBE;"
+                            "border-radius:8px;padding:.5rem 1rem;margin:.4rem 0;"
+                            "font-size:.75rem;font-weight:600;color:#0D7F4D'>"
+                            "✅ Güvenli versiyon üretildi</div>",
+                            unsafe_allow_html=True)
+                        st.code(_imp_res['sql'], language='sql')
+                        st.markdown(dl(_imp_res['sql']), unsafe_allow_html=True)
+                        render_risk_score(_imp_res['sql'])
+                except Exception as _ie:
+                    st.error(f'İyileştirme hatası: {_ie}')
 
 # ══════════════════════════════════════════════════════════════════════════
 #  HISTORY — DB'den kullanıcı bazlı
