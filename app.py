@@ -310,6 +310,9 @@ def init_db():
             title       TEXT NOT NULL,
             prompt      TEXT NOT NULL,
             icon        TEXT DEFAULT '📋',
+            scope       TEXT DEFAULT 'system',
+            user_id     INTEGER DEFAULT NULL,
+            team_role   TEXT DEFAULT NULL,
             created_by  TEXT DEFAULT 'system',
             created_at  TEXT DEFAULT (datetime('now'))
         )
@@ -505,24 +508,58 @@ def cache_set(key, prompt, result, dialect):
     conn.commit(); conn.close()
 
 # ── ŞABLONLAR ─────────────────────────────────────────────────────────────
-def templates_get():
+def templates_get(user_id=None, role=None):
+    """3 katman: system (herkes) + team (aynı rol) + personal (sadece ben)"""
     conn = get_db()
-    rows = conn.execute("SELECT * FROM templates ORDER BY category, title").fetchall()
+    rows = conn.execute("""
+        SELECT * FROM templates
+        WHERE scope='system'
+           OR (scope='personal' AND user_id=?)
+           OR (scope='team'    AND team_role=?)
+        ORDER BY scope DESC, category, title
+    """, (user_id, role)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
-def templates_add(category, title, prompt, icon, created_by):
+def templates_add(category, title, prompt, icon, created_by,
+                  scope='system', user_id=None, team_role=None):
     conn = get_db()
     conn.execute("""
-        INSERT INTO templates (category,title,prompt,icon,created_by)
-        VALUES (?,?,?,?,?)
-    """, (category, title, prompt, icon, created_by))
+        INSERT INTO templates (category,title,prompt,icon,created_by,scope,user_id,team_role)
+        VALUES (?,?,?,?,?,?,?,?)
+    """, (category, title, prompt, icon, created_by, scope, user_id, team_role))
     conn.commit(); conn.close()
 
-def templates_delete(tid):
+def templates_delete(tid, user_id=None, role=None):
+    """Sadece kendi şablonunu silebilir. Admin hepsini silebilir."""
     conn = get_db()
-    conn.execute("DELETE FROM templates WHERE id=?", (tid,))
+    if role == 'admin':
+        conn.execute("DELETE FROM templates WHERE id=?", (tid,))
+    else:
+        conn.execute("DELETE FROM templates WHERE id=? AND user_id=?", (tid, user_id))
     conn.commit(); conn.close()
+
+def templates_auto_suggest(user_id, limit=5):
+    """Kullanıcının en sık sorduğu promptlardan otomatik şablon önerisi üret."""
+    conn = get_db()
+    # En çok tekrarlanan sorgular — en az 2 kez sorulmuş
+    rows = conn.execute("""
+        SELECT prompt, COUNT(*) as cnt, schema_name, dialect
+        FROM query_log
+        WHERE user_id=?
+        GROUP BY prompt
+        HAVING cnt >= 2
+        ORDER BY cnt DESC
+        LIMIT ?
+    """, (user_id, limit)).fetchall()
+    conn.close()
+    # Kişisel şablon olarak zaten kaydedilmişleri çıkar
+    existing = get_db().execute(
+        "SELECT prompt FROM templates WHERE user_id=? AND scope='personal'",
+        (user_id,)
+    ).fetchall()
+    existing_prompts = {r[0] for r in existing}
+    return [dict(r) for r in rows if r['prompt'] not in existing_prompts]
 
 # ── DB BAĞLANTI FONKSİYONLARI ───────────────────────────────────────────────
 def db_conn_save(user_id, name, db_type, host, port, database, uname, password):
@@ -2093,41 +2130,159 @@ if schema_text:
         f'Şema Modu · {schema_meta["name"]} · {schema_meta["tables"]} tablo</div>',
         unsafe_allow_html=True)
 
-# ── ŞABLON SEÇİCİ ────────────────────────────────────────────────────────
-_tmpls = templates_get()
-if _tmpls:
-    _cats = sorted(set(t['category'] for t in _tmpls))
-    st.markdown('<p class="lbl">📋 Hazır Şablonlar</p>', unsafe_allow_html=True)
-    _tab_labels = _cats
-    _tabs = st.tabs(_tab_labels)
-    for _ti, _tab in enumerate(_tabs):
-        with _tab:
-            _cat_tmpls = [t for t in _tmpls if t['category'] == _cats[_ti]]
-            _tcols = st.columns(min(len(_cat_tmpls), 3))
-            for _ci, _t in enumerate(_cat_tmpls):
-                with _tcols[_ci % 3]:
-                    if st.button(
-                        f"{_t['icon']} {_t['title']}",
-                        key=f"tpl_{_t['id']}",
-                        use_container_width=True
-                    ):
-                        st.session_state.lp = _t['prompt']
-                        st.rerun()
+# ── ŞABLON SEÇİCİ — 3 KATMAN ───────────────────────────────────────────────
+_tmpls = templates_get(st.session_state.user_id, st.session_state.role)
+_sys_tmpls  = [t for t in _tmpls if t.get('scope','system') == 'system']
+_team_tmpls = [t for t in _tmpls if t.get('scope') == 'team']
+_per_tmpls  = [t for t in _tmpls if t.get('scope') == 'personal']
 
+st.markdown('<p class="lbl">📋 Şablonlar</p>', unsafe_allow_html=True)
+
+# ── Ana 3 sekme ──────────────────────────────────────────────────────────
+_scope_tabs = st.tabs([
+    f'🌐 Sistem ({len(_sys_tmpls)})',
+    f'👥 Ekip ({len(_team_tmpls)})',
+    f'👤 Kişisel ({len(_per_tmpls)})',
+])
+
+# ── SİSTEM ŞABLONLARI ─────────────────────────────────────────────────────
+with _scope_tabs[0]:
+    if _sys_tmpls:
+        _cats = sorted(set(t['category'] for t in _sys_tmpls))
+        _cat_tabs = st.tabs([c.split(' ',1)[1] if ' ' in c else c for c in _cats])
+        for _ci, _ct in enumerate(_cat_tabs):
+            with _ct:
+                _ct_tmpls = [t for t in _sys_tmpls if t['category']==_cats[_ci]]
+                _tcols = st.columns(min(len(_ct_tmpls), 3))
+                for _ti, _t in enumerate(_ct_tmpls):
+                    with _tcols[_ti % 3]:
+                        if st.button(f"{_t['icon']} {_t['title']}",
+                                     key=f"sys_{_t['id']}", use_container_width=True):
+                            st.session_state.lp = _t['prompt']; st.rerun()
+    else:
+        st.info('Sistem şablonu yok.')
+    # Admin sistem şablonu ekleyebilir
     if st.session_state.role == 'admin':
-        with st.expander('➕ Yeni Şablon Ekle', expanded=False):
-            _t_col1, _t_col2 = st.columns(2)
-            with _t_col1:
-                _t_cat   = st.text_input('Kategori', key='tc_cat', placeholder='📊 CRM')
-                _t_title = st.text_input('Başlık', key='tc_title')
-            with _t_col2:
-                _t_icon  = st.text_input('İkon', key='tc_icon', value='📋')
-                _t_save  = st.button('💾 Şablonu Kaydet', key='tc_save')
-            _t_prompt = st.text_area('Prompt', key='tc_prompt', height=80)
-            if _t_save:
-                if _t_cat and _t_title and _t_prompt:
-                    templates_add(_t_cat, _t_title, _t_prompt, _t_icon, st.session_state.username)
-                    st.success('✅ Şablon eklendi!'); st.rerun()
+        with st.expander('➕ Sistem Şablonu Ekle', expanded=False):
+            _sc1, _sc2 = st.columns(2)
+            with _sc1:
+                _s_cat   = st.text_input('Kategori', key='sc_cat', placeholder='📊 CRM')
+                _s_title = st.text_input('Başlık', key='sc_title')
+            with _sc2:
+                _s_icon  = st.text_input('İkon', key='sc_icon', value='📋')
+                _s_save  = st.button('💾 Kaydet', key='sc_save')
+            _s_prompt = st.text_area('Prompt', key='sc_prompt', height=70)
+            if _s_save and _s_cat and _s_title and _s_prompt:
+                templates_add(_s_cat, _s_title, _s_prompt, _s_icon,
+                              st.session_state.username, scope='system')
+                st.success('✅ Sistem şablonu eklendi!'); st.rerun()
+
+# ── EKİP ŞABLONLARI ───────────────────────────────────────────────────────
+with _scope_tabs[1]:
+    if _team_tmpls:
+        _tcols2 = st.columns(min(len(_team_tmpls), 3))
+        for _ti, _t in enumerate(_team_tmpls):
+            with _tcols2[_ti % 3]:
+                st.markdown(
+                    f"<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
+                    f"border-radius:8px;padding:.4rem .7rem;margin-bottom:.3rem'>"
+                    f"<div style='font-size:.82rem;font-weight:600;color:#003DA5'>"
+                    f"{_t['icon']} {_t['title']}</div>"
+                    f"<div style='font-size:.68rem;color:#9AA5B4'>👥 {_t.get('team_role','')}</div>"
+                    f"</div>", unsafe_allow_html=True)
+                if st.button('Kullan', key=f"team_{_t['id']}", use_container_width=True):
+                    st.session_state.lp = _t['prompt']; st.rerun()
+    else:
+        st.info(f"'{st.session_state.role}' ekibi için henüz şablon yok.")
+    with st.expander('➕ Ekip Şablonu Ekle', expanded=False):
+        st.caption(f'Bu şablon tüm {st.session_state.role} rolündeki kullanıcılara görünür.')
+        _ec1, _ec2 = st.columns(2)
+        with _ec1:
+            _e_cat   = st.text_input('Kategori', key='ec_cat', placeholder='📊 Ekip')
+            _e_title = st.text_input('Başlık', key='ec_title')
+        with _ec2:
+            _e_icon  = st.text_input('İkon', key='ec_icon', value='👥')
+            _e_save  = st.button('💾 Kaydet', key='ec_save')
+        _e_prompt = st.text_area('Prompt', key='ec_prompt', height=70)
+        if _e_save and _e_cat and _e_title and _e_prompt:
+            templates_add(_e_cat, _e_title, _e_prompt, _e_icon,
+                          st.session_state.username,
+                          scope='team', team_role=st.session_state.role)
+            st.success(f"✅ '{st.session_state.role}' ekibine şablon eklendi!"); st.rerun()
+
+# ── KİŞİSEL ŞABLONLAR ─────────────────────────────────────────────────────
+with _scope_tabs[2]:
+    # Otomatik öneri — sık kullanılan sorgulardan
+    _suggestions = templates_auto_suggest(st.session_state.user_id)
+    if _suggestions:
+        st.markdown(
+            "<div style='background:#FFFBEB;border:1px solid #FDE68A;"
+            "border-left:3px solid #D97706;border-radius:8px;"
+            "padding:.5rem .9rem;margin-bottom:.6rem'>"
+            "<span style='font-size:.65rem;font-weight:700;color:#B45309;"
+            "letter-spacing:1.2px;text-transform:uppercase'>✨ Kişisel Şablon Önerisi</span>"
+            "<br><span style='font-size:.75rem;color:#92400E'>"
+            "Bu sorguları en az 2 kez sordunuz — kişisel şablonunuza eklemek ister misiniz?</span>"
+            "</div>", unsafe_allow_html=True)
+        for _sg in _suggestions:
+            _sga, _sgb = st.columns([4, 1])
+            with _sga:
+                st.markdown(
+                    f"<div style='font-size:.82rem;color:#374151;padding:.3rem 0'>"
+                    f"🔁 {_sg['prompt'][:80]}{'…' if len(_sg['prompt'])>80 else ''}"
+                    f"<span style='font-size:.68rem;color:#9AA5B4'> · {_sg['cnt']}x soruldu</span>"
+                    f"</div>", unsafe_allow_html=True)
+            with _sgb:
+                if st.button('➕ Ekle', key=f"sg_{hash(_sg['prompt'])}", use_container_width=True):
+                    templates_add(
+                        '⭐ Sık Kullandıklarım',
+                        _sg['prompt'][:40] + ('…' if len(_sg['prompt'])>40 else ''),
+                        _sg['prompt'], '⭐',
+                        st.session_state.username,
+                        scope='personal',
+                        user_id=st.session_state.user_id
+                    )
+                    st.success('✅ Kişisel şablona eklendi!'); st.rerun()
+
+    if _per_tmpls:
+        _pcols = st.columns(min(len(_per_tmpls), 3))
+        for _pi, _pt in enumerate(_per_tmpls):
+            with _pcols[_pi % 3]:
+                st.markdown(
+                    f"<div style='background:#EDFAF3;border:1px solid #A3DFBE;"
+                    f"border-radius:8px;padding:.4rem .7rem;margin-bottom:.3rem'>"
+                    f"<div style='font-size:.82rem;font-weight:600;color:#0D7F4D'>"
+                    f"{_pt['icon']} {_pt['title']}</div>"
+                    f"<div style='font-size:.68rem;color:#9AA5B4'>👤 Kişisel</div>"
+                    f"</div>", unsafe_allow_html=True)
+                _pb1, _pb2 = st.columns(2)
+                with _pb1:
+                    if st.button('Kullan', key=f"per_u_{_pt['id']}", use_container_width=True):
+                        st.session_state.lp = _pt['prompt']; st.rerun()
+                with _pb2:
+                    if st.button('🗑', key=f"per_d_{_pt['id']}", use_container_width=True):
+                        templates_delete(_pt['id'], st.session_state.user_id, st.session_state.role)
+                        st.rerun()
+    else:
+        if not _suggestions:
+            st.info('Henüz kişisel şablonunuz yok. Aşağıdan ekleyebilir veya sık kullandığınız sorgular otomatik önerilir.')
+
+    # Manuel kişisel şablon ekle
+    with st.expander('➕ Kişisel Şablon Ekle', expanded=False):
+        _pc1, _pc2 = st.columns(2)
+        with _pc1:
+            _p_cat   = st.text_input('Kategori', key='pc_cat', placeholder='⭐ Favorilerim')
+            _p_title = st.text_input('Başlık', key='pc_title')
+        with _pc2:
+            _p_icon  = st.text_input('İkon', key='pc_icon', value='⭐')
+            _p_save  = st.button('💾 Kaydet', key='pc_save')
+        _p_prompt = st.text_area('Prompt', key='pc_prompt', height=70)
+        if _p_save and _p_cat and _p_title and _p_prompt:
+            templates_add(_p_cat, _p_title, _p_prompt, _p_icon,
+                          st.session_state.username,
+                          scope='personal',
+                          user_id=st.session_state.user_id)
+            st.success('✅ Kişisel şablonunuza eklendi!'); st.rerun()
 
 st.markdown('<div class="card-sep"></div>', unsafe_allow_html=True)
 
