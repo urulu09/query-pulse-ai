@@ -2149,7 +2149,7 @@ _per_tmpls  = [t for t in _tmpls if t.get('scope') == 'personal']
 st.markdown('<p class="lbl">📋 Şablonlar</p>', unsafe_allow_html=True)
 
 # Şablon kart yardımcısı
-def _tpl_card(t, key, scope_color, scope_bg, scope_icon, show_delete=False, del_key=None):
+def _tpl_card(t, key, scope_color, scope_bg, show_delete=False, del_key=None):
     prompt_short = t['prompt'][:72] + ('…' if len(t['prompt']) > 72 else '')
     st.markdown(
         f"<div style='background:{scope_bg};border:1px solid {scope_color}44;"
@@ -2290,7 +2290,7 @@ with _scope_tabs[2]:
         for _pi, _pt in enumerate(_per_tmpls):
             with _pcols[_pi % 3]:
                 _tpl_card(_pt, f"per_u_{_pt['id']}", "#0D7F4D", "#EDFAF3",
-                          "👤", show_delete=True, del_key=f"per_d_{_pt['id']}")
+                          show_delete=True, del_key=f"per_d_{_pt['id']}")
     else:
         if not _suggestions:
             st.markdown(
