@@ -339,6 +339,16 @@ def init_db():
     """)
     conn.commit()
 
+    # ── MIGRATION: templates tablosuna yeni sütunlar ekle (varsa atla) ──────
+    _existing_cols = [r[1] for r in c.execute("PRAGMA table_info(templates)").fetchall()]
+    if 'scope' not in _existing_cols:
+        c.execute("ALTER TABLE templates ADD COLUMN scope TEXT DEFAULT 'system'")
+    if 'user_id' not in _existing_cols:
+        c.execute("ALTER TABLE templates ADD COLUMN user_id INTEGER DEFAULT NULL")
+    if 'team_role' not in _existing_cols:
+        c.execute("ALTER TABLE templates ADD COLUMN team_role TEXT DEFAULT NULL")
+    conn.commit()
+
     # Admin kullanıcı yoksa oluştur
     existing = c.execute("SELECT id FROM users WHERE username='admin'").fetchone()
     if not existing:
