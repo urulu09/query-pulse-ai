@@ -240,7 +240,9 @@ div[data-testid="column"]:nth-last-child(-n+2) .stButton>button:hover {
 for k, v in [("history",[]),("qc",0),("tt",0),("lp",""),
               ("logged_in",False),("username",""),("role",""),
               ("user_id",None),("page","main"),
-              ("cache_hit",False),("last_res",None),("preview_sql","")]:
+              ("cache_hit",False),("last_res",None),("preview_sql",""),
+              ("chat_history",[]),("chat_mode",False),
+              ("briefing_shown",False)]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -1958,6 +1960,52 @@ if st.session_state.page == "admin":
 # Rol bazlı SQL modu kısıtlaması
 _allowed_modes = ROLE_MODES.get(st.session_state.role, ["🔒 Read-Only"])
 
+# ── SABAH BRİFİNGİ — günde bir kez göster ──────────────────────────────────
+if not st.session_state.briefing_shown:
+    _today = __import__("datetime").date.today().isoformat()
+    _brief_conn = get_db()
+    _brief_stats = {
+        "today_q":   _brief_conn.execute(
+            "SELECT COUNT(*) FROM query_log WHERE user_id=? AND created_at>=?",
+            (st.session_state.user_id, _today)).fetchone()[0],
+        "kvkk_today":_brief_conn.execute(
+            "SELECT COUNT(*) FROM query_log WHERE user_id=? AND kvkk_hit=1 AND created_at>=?",
+            (st.session_state.user_id, _today)).fetchone()[0],
+        "total_q":   _brief_conn.execute(
+            "SELECT COUNT(*) FROM query_log WHERE user_id=?",
+            (st.session_state.user_id,)).fetchone()[0],
+        "last_prompt":_brief_conn.execute(
+            "SELECT prompt FROM query_log WHERE user_id=? ORDER BY created_at DESC LIMIT 1",
+            (st.session_state.user_id,)).fetchone(),
+    }
+    _brief_conn.close()
+    _hour = __import__("datetime").datetime.now().hour
+    _greeting = "Günaydın" if _hour < 12 else ("İyi akşamlar" if _hour >= 18 else "İyi günler")
+    _brief_html = (
+        f"<div style='background:linear-gradient(135deg,#003DA5,#0057D9);"
+        f"border-radius:12px;padding:1rem 1.3rem;margin:.5rem 0 .8rem;"
+        f"display:flex;align-items:center;justify-content:space-between;gap:1rem'>"
+        f"<div>"
+        f"<div style='font-size:.78rem;color:#CADCFC;margin-bottom:.25rem'>"
+        f"☀️ {_greeting}, <b style='color:#FFC72C'>{st.session_state.username}</b></div>"
+        f"<div style='display:flex;gap:1.2rem;flex-wrap:wrap'>"
+        f"<span style='font-size:.72rem;color:#fff'>"
+        f"📊 Bugün <b>{_brief_stats['today_q']}</b> sorgu</span>"
+        f"<span style='font-size:.72rem;color:#fff'>"
+        f"📈 Toplam <b>{_brief_stats['total_q']}</b> sorgu</span>"
+        + (f"<span style='font-size:.72rem;color:#FCA5A5'>"
+           f"🔏 Bugün <b>{_brief_stats['kvkk_today']}</b> KVKK uyarısı</span>"
+           if _brief_stats["kvkk_today"] > 0 else "")
+        + (f"<span style='font-size:.72rem;color:#CADCFC'>"
+           f"🔁 Son: <i>{_brief_stats['last_prompt'][0][:45]}…</i></span>"
+           if _brief_stats["last_prompt"] else "")
+        + f"</div></div>"
+        f"</div>"
+    )
+    st.markdown(_brief_html, unsafe_allow_html=True)
+    st.session_state.briefing_shown = True
+
+
 # ── api key ───────────────────────────────────────────────────────────────────
 api_key = st.secrets.get("OPENAI_API_KEY", "")
 if not api_key:
@@ -2349,6 +2397,47 @@ with _scope_tabs[2]:
 
 st.markdown('<div class="card-sep"></div>', unsafe_allow_html=True)
 
+# ── AKILLI TAMAMLAMA ─────────────────────────────────────────────────────────
+_ac_input = st.text_input(
+    'ac_input', value='', placeholder='🔍 Hızlı arama — yazmaya başla, öneri gelsin…',
+    key='ac_input', label_visibility='collapsed')
+if _ac_input and len(_ac_input) >= 3:
+    _ac_conn = get_db()
+    _ac_rows = _ac_conn.execute("""
+        SELECT DISTINCT prompt FROM query_log
+        WHERE user_id=? AND prompt LIKE ?
+        ORDER BY created_at DESC LIMIT 5
+    """, (st.session_state.user_id, f'%{_ac_input}%')).fetchall()
+    # Sistem şablonlarından da ara
+    _ac_tmpls = _ac_conn.execute("""
+        SELECT DISTINCT prompt, title FROM templates
+        WHERE (scope='system' OR user_id=?)
+        AND (prompt LIKE ? OR title LIKE ?)
+        LIMIT 3
+    """, (st.session_state.user_id,
+           f'%{_ac_input}%', f'%{_ac_input}%')).fetchall()
+    _ac_conn.close()
+    _all_ac = [(r[0], '🕐 Geçmişten') for r in _ac_rows]\
+            + [(r[0], f'📋 {r[1]}') for r in _ac_tmpls]
+    if _all_ac:
+        st.markdown(
+            "<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
+            "border-radius:8px;padding:.5rem .8rem;margin-bottom:.4rem'>"
+            "<span style='font-size:.65rem;font-weight:700;color:#003DA5;"
+            "letter-spacing:1.2px;text-transform:uppercase'>💡 Öneriler</span>"
+            "</div>", unsafe_allow_html=True)
+        for _ac_prompt, _ac_src in _all_ac:
+            _acc1, _acc2 = st.columns([5, 1])
+            with _acc1:
+                st.markdown(
+                    f"<div style='font-size:.82rem;color:#374151;padding:.2rem 0'>"
+                    f"<span style='font-size:.68rem;color:#9AA5B4'>{_ac_src} · </span>"
+                    f"{_ac_prompt[:70]}{'…' if len(_ac_prompt)>70 else ''}</div>",
+                    unsafe_allow_html=True)
+            with _acc2:
+                if st.button('Seç', key=f'ac_{hash(_ac_prompt)}', use_container_width=True):
+                    st.session_state.lp = _ac_prompt; st.rerun()
+
 st.markdown('<p class="lbl">✦ Doğal Dil ile Açıkla</p>', unsafe_allow_html=True)
 prompt = st.text_area("p", value=st.session_state.lp, height=120,
     placeholder="Örn. → Geçen ay kaydolan ama henüz sipariş vermemiş kullanıcıları referans kaynağına göre gruplandır…",
@@ -2702,6 +2791,49 @@ if go:
             f'<ul>{bullets_rich}</ul></div>',
             unsafe_allow_html=True)
 
+
+    # ── SOHBET MODU — devam et ────────────────────────────────────────────────
+    st.markdown(
+        "<div style='background:#F5F7FA;border:1px solid #DCE3ED;"
+        "border-radius:10px;padding:.7rem 1rem;margin:.5rem 0'>"
+        "<span style='font-size:.65rem;font-weight:700;color:#6B7A90;"
+        "letter-spacing:1.2px;text-transform:uppercase'>💬 Bu Sorguya Devam Et</span>"
+        "</div>", unsafe_allow_html=True)
+    _chat_col1, _chat_col2 = st.columns([5, 1])
+    with _chat_col1:
+        _followup = st.text_input(
+            'followup', placeholder='Örn: Bunları şehre göre grupla · Sadece platinum olanları getir…',
+            key='followup_input', label_visibility='collapsed')
+    with _chat_col2:
+        _followup_go = st.button('➜ Devam', key='followup_go', use_container_width=True)
+    if _followup_go and _followup.strip():
+        # Önceki context ile birleştir
+        _chat_prompt = (
+            f'Önceki sorgu: {prompt}\n'
+            f'Üretilen SQL:\n{res["sql"]}\n\n'
+            f'Kullanıcının devam isteği: {_followup}\n'
+            f'Yukarıdaki SQL\'i bu isteğe göre güncelle veya genişlet.'
+        )
+        st.session_state.lp = _chat_prompt
+        st.session_state.chat_history.append({
+            'prompt': prompt, 'sql': res['sql'], 'followup': _followup
+        })
+        st.rerun()
+    # Chat geçmişi göster
+    if st.session_state.chat_history:
+        with st.expander(f'💬 Sohbet Geçmişi ({len(st.session_state.chat_history)} adım)', expanded=False):
+            for _ci, _ch in enumerate(st.session_state.chat_history):
+                st.markdown(
+                    f"<div style='border-left:3px solid #003DA5;padding:.4rem .8rem;"
+                    f"margin-bottom:.4rem;background:#F0F4FF;border-radius:6px'>"
+                    f"<div style='font-size:.75rem;font-weight:600;color:#003DA5'>"
+                    f"Adım {_ci+1}: {_ch['prompt'][:60]}…</div>"
+                    f"<div style='font-size:.7rem;color:#6B7A90;margin-top:.15rem'>"
+                    f"↳ {_ch['followup']}</div></div>",
+                    unsafe_allow_html=True)
+            if st.button('🗑 Sohbeti Temizle', key='clear_chat'):
+                st.session_state.chat_history = []
+                st.rerun()
 
     # ── OTOMATİK SORGU İYİLEŞTİRME ──────────────────────────────────────────
     _review_status = res.get('review', {}).get('status', 'SAFE') if res.get('review') else 'SAFE'
