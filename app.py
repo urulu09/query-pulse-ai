@@ -194,6 +194,26 @@ div[data-testid="stCopyButton"] button:hover{background:#89DCEB!important;color:
 .foot p+p{margin-top:.2rem;}
 .foot strong{color:var(--text-3);font-weight:600;}
 
+/* Şablon kullan butonları — sarı değil, nötr koyu */
+div[data-testid="stVerticalBlock"] .stButton > button[kind="secondary"],
+div[data-testid="stHorizontalBlock"] .stButton > button {
+  background: #1E293B !important;
+  color: #F1F5F9 !important;
+  border: none !important;
+  font-size: .8rem !important;
+  font-weight: 600 !important;
+  padding: .35rem .8rem !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+div[data-testid="stVerticalBlock"] .stButton > button[kind="secondary"]:hover,
+div[data-testid="stHorizontalBlock"] .stButton > button:hover {
+  background: #334155 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
 /* nav butonları */
 div[data-testid="column"]:nth-last-child(-n+2) .stButton>button {
   background: rgba(255,255,255,.12) !important;
@@ -2150,27 +2170,37 @@ st.markdown('<p class="lbl">📋 Şablonlar</p>', unsafe_allow_html=True)
 
 # Şablon kart yardımcısı
 def _tpl_card(t, key, scope_color, scope_bg, show_delete=False, del_key=None):
-    prompt_short = t['prompt'][:72] + ('…' if len(t['prompt']) > 72 else '')
+    prompt_short = t['prompt'][:80] + ('…' if len(t['prompt']) > 80 else '')
+    # Tıklanınca prompt'u session_state'e yaz — st.button yerine HTML kart
     st.markdown(
-        f"<div style='background:{scope_bg};border:1px solid {scope_color}44;"
-        f"border-left:3px solid {scope_color};border-radius:10px;"
-        f"padding:.65rem .9rem;margin-bottom:.5rem;min-height:72px'>"
-        f"<div style='font-size:.88rem;font-weight:700;color:#0F1623;margin-bottom:.2rem'>"
-        f"{t['icon']} {t['title']}</div>"
-        f"<div style='font-size:.72rem;color:#6B7A90;line-height:1.4'>{prompt_short}</div>"
+        f"<div style='"
+        f"background:{scope_bg};"
+        f"border:1px solid {scope_color}55;"
+        f"border-left:4px solid {scope_color};"
+        f"border-radius:10px;"
+        f"padding:.8rem 1rem;"
+        f"margin-bottom:.4rem;"
+        f"cursor:pointer;"
+        f"transition:box-shadow .15s;"
+        f"'>"
+        f"<div style='font-size:.9rem;font-weight:700;color:#0F1623;margin-bottom:.3rem'>"
+        f"{t['icon']}  {t['title']}</div>"
+        f"<div style='font-size:.76rem;color:#374151;line-height:1.5;"
+        f"background:rgba(255,255,255,.6);border-radius:6px;padding:.3rem .5rem'>"
+        f"{prompt_short}</div>"
         f"</div>",
         unsafe_allow_html=True)
     if show_delete:
-        _cb1, _cb2 = st.columns([3,1])
+        _cb1, _cb2 = st.columns([4, 1])
         with _cb1:
-            if st.button('▶ Kullan', key=key, use_container_width=True):
+            if st.button(f'▶  {t["title"]} — Kullan', key=key, use_container_width=True):
                 st.session_state.lp = t['prompt']; st.rerun()
         with _cb2:
             if st.button('🗑', key=del_key, use_container_width=True):
                 templates_delete(t['id'], st.session_state.user_id, st.session_state.role)
                 st.rerun()
     else:
-        if st.button('▶ Kullan', key=key, use_container_width=True):
+        if st.button(f'▶  {t["title"]} — Kullan', key=key, use_container_width=True):
             st.session_state.lp = t['prompt']; st.rerun()
 
 # ── Ana 3 sekme ──────────────────────────────────────────────────────────
