@@ -242,7 +242,7 @@ for k, v in [("history",[]),("qc",0),("tt",0),("lp",""),
               ("user_id",None),("page","main"),
               ("cache_hit",False),("last_res",None),("preview_sql",""),
               ("chat_history",[]),("chat_mode",False),
-              ("briefing_shown",False)]:
+              ("briefing_shown",False),("auto_go",False)]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -2436,7 +2436,9 @@ if _ac_input and len(_ac_input) >= 3:
                     unsafe_allow_html=True)
             with _acc2:
                 if st.button('Seç', key=f'ac_{hash(_ac_prompt)}', use_container_width=True):
-                    st.session_state.lp = _ac_prompt; st.rerun()
+                    st.session_state.lp = _ac_prompt
+                    st.session_state.ac_input = ''  # arama kutusunu temizle
+                    st.rerun()
 
 st.markdown('<p class="lbl">✦ Doğal Dil ile Açıkla</p>', unsafe_allow_html=True)
 prompt = st.text_area("p", value=st.session_state.lp, height=120,
@@ -2444,6 +2446,11 @@ prompt = st.text_area("p", value=st.session_state.lp, height=120,
     key="pk", label_visibility="collapsed")
 
 go = st.button("⚡  SQL Oluştur", key="go")
+
+# Sohbet modundan gelen otomatik tetikleme
+if st.session_state.get('auto_go', False):
+    go = True
+    st.session_state.auto_go = False
 
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -2593,17 +2600,38 @@ if go:
             "Bu SQL sorgusu ekip şablonuna eklenir — "
             f"tüm <b>{st.session_state.role}</b> rolündeki kullanıcılar kullanabilir."
             "</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div style='display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-bottom:.5rem'>"
+            "<div><label style='font-size:.72rem;font-weight:700;color:#003DA5;"
+            "display:block;margin-bottom:.25rem'>📝 Şablon Adı</label></div>"
+            "<div><label style='font-size:.72rem;font-weight:700;color:#003DA5;"
+            "display:block;margin-bottom:.25rem'>📂 Kategori</label></div>"
+            "</div>", unsafe_allow_html=True)
         _sh_col1, _sh_col2 = st.columns(2)
         with _sh_col1:
             _sh_title = st.text_input('Şablon Adı', key='sh_title',
-                placeholder='örn: Gecikmiş Fatura Analizi')
+                placeholder='örn: Gecikmiş Fatura Analizi',
+                label_visibility='collapsed')
+        with _sh_col2:
             _sh_cat   = st.text_input('Kategori', key='sh_cat',
                 value=f'👥 {st.session_state.role.title()}',
-                placeholder='📊 Ekibim')
-        with _sh_col2:
-            _sh_icon  = st.text_input('İkon', key='sh_icon', value='🤝')
-            _sh_scope = st.radio('Kime görünsün?', ['Ekip', 'Kişisel'], key='sh_scope',
-                horizontal=True)
+                placeholder='📊 Ekibim',
+                label_visibility='collapsed')
+
+        st.markdown(
+            "<div style='display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-bottom:.25rem'>"
+            "<div><label style='font-size:.72rem;font-weight:700;color:#003DA5;"
+            "display:block'>🎨 İkon</label></div>"
+            "<div><label style='font-size:.72rem;font-weight:700;color:#003DA5;"
+            "display:block'>🎯 Kime görünsün?</label></div>"
+            "</div>", unsafe_allow_html=True)
+        _sh_col3, _sh_col4 = st.columns(2)
+        with _sh_col3:
+            _sh_icon  = st.text_input('İkon', key='sh_icon', value='🤝',
+                label_visibility='collapsed')
+        with _sh_col4:
+            _sh_scope = st.radio('Kime', ['Ekip', 'Kişisel'], key='sh_scope',
+                horizontal=True, label_visibility='collapsed')
         if st.button('📤  Paylaş & Şablona Ekle', key='share_sql'):
             if _sh_title.strip():
                 _scope_val    = 'team'     if _sh_scope == 'Ekip' else 'personal'
@@ -2622,6 +2650,37 @@ if go:
                 st.rerun()
             else:
                 st.warning('Şablon adı boş olamaz.')
+
+    # ── VERİYİ YORUMLA (SQL bazlı) — önizleme yoksa da çalışır ───────────
+    with st.expander('📊  Sorguyu Yorumla — SQL Açıklaması', expanded=False):
+        st.caption('SQL sorgusunun ne yaptığını Türkçe açıklar, potansiyel sonuçları yorumlar.')
+        if st.button('🔍 SQL\'i Türkçe Açıkla', key='explain_sql'):
+            with st.spinner('SQL yorumlanıyor…'):
+                try:
+                    _exp_client = openai.OpenAI(api_key=api_key)
+                    _exp_r = _exp_client.chat.completions.create(
+                        model=model, max_tokens=500,
+                        messages=[
+                            {'role':'system','content':'Sen Turkcell kıdemli veri analistisin. SQL sorgularını Türkçe net ve iş odaklı açıkla.'},
+                            {'role':'user','content':f'Aşağıdaki SQL\'i kısa ve net Türkçe madde madde açıkla. Ne sorguluyor, hangi tabloları birleştiriyor, ne amaç güdüyor — maksimum 4 madde.\n\n{res["sql"]}'}
+                        ])
+                    _exp = _exp_r.choices[0].message.content
+                    st.markdown(
+                        "<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
+                        "border-left:3px solid #003DA5;border-radius:10px;"
+                        "padding:.8rem 1.1rem;margin-top:.6rem'>"
+                        "<div style='font-size:.65rem;font-weight:700;color:#003DA5;"
+                        "letter-spacing:1.2px;text-transform:uppercase;margin-bottom:.5rem'>"
+                        "📊 SQL Açıklaması</div>"
+                        + ''.join(
+                            f"<div style='display:flex;gap:.5rem;margin-bottom:.35rem'>"
+                            f"<span style='color:#003DA5;flex-shrink:0'>•</span>"
+                            f"<span style='font-size:.82rem;color:#374151'>{ln.lstrip('•-– ').strip()}</span></div>"
+                            for ln in _exp.split('\n') if ln.strip()
+                        )
+                        + "</div>", unsafe_allow_html=True)
+                except Exception as _ee:
+                    st.error(f'Yorum hatası: {_ee}')
 
     # ── SONUÇ ÖNİZLEME ───────────────────────────────────────────────────
     _preview_db = st.secrets.get('PREVIEW_DB_URL', '')
@@ -2807,17 +2866,18 @@ if go:
     with _chat_col2:
         _followup_go = st.button('➜ Devam', key='followup_go', use_container_width=True)
     if _followup_go and _followup.strip():
-        # Önceki context ile birleştir
         _chat_prompt = (
             f'Önceki sorgu: {prompt}\n'
             f'Üretilen SQL:\n{res["sql"]}\n\n'
-            f'Kullanıcının devam isteği: {_followup}\n'
-            f'Yukarıdaki SQL\'i bu isteğe göre güncelle veya genişlet.'
+            f'Devam isteği: {_followup}\n\n'
+            f'Yukarıdaki SQL\'i bu isteğe göre güncelle veya genişlet. '
+            f'Orijinal iş mantığını koru, sadece istenen değişikliği ekle.'
         )
-        st.session_state.lp = _chat_prompt
         st.session_state.chat_history.append({
             'prompt': prompt, 'sql': res['sql'], 'followup': _followup
         })
+        st.session_state.lp = _chat_prompt
+        st.session_state.auto_go = True  # ← bir sonraki run'da SQL üretilecek
         st.rerun()
     # Chat geçmişi göster
     if st.session_state.chat_history:
@@ -2836,8 +2896,10 @@ if go:
                 st.rerun()
 
     # ── OTOMATİK SORGU İYİLEŞTİRME ──────────────────────────────────────────
-    _review_status = res.get('review', {}).get('status', 'SAFE') if res.get('review') else 'SAFE'
-    if _review_status in ('RISKY', 'INVALID'):
+    _review_status = res.get('review', {}).get('status', '') if res.get('review') else ''
+    # RISKY/INVALID ya da risk skoru düşükse iyileştirme öner
+    _show_improve = _review_status in ('RISKY', 'INVALID')
+    if _show_improve:
         st.markdown(
             "<div style='background:#FFFBEB;border:1px solid #FDE68A;"
             "border-left:3px solid #D97706;border-radius:10px;"
