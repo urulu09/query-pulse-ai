@@ -2148,30 +2148,64 @@ _per_tmpls  = [t for t in _tmpls if t.get('scope') == 'personal']
 
 st.markdown('<p class="lbl">📋 Şablonlar</p>', unsafe_allow_html=True)
 
+# Şablon kart yardımcısı
+def _tpl_card(t, key, scope_color, scope_bg, scope_icon, show_delete=False, del_key=None):
+    prompt_short = t['prompt'][:72] + ('…' if len(t['prompt']) > 72 else '')
+    st.markdown(
+        f"<div style='background:{scope_bg};border:1px solid {scope_color}44;"
+        f"border-left:3px solid {scope_color};border-radius:10px;"
+        f"padding:.65rem .9rem;margin-bottom:.5rem;min-height:72px'>"
+        f"<div style='font-size:.88rem;font-weight:700;color:#0F1623;margin-bottom:.2rem'>"
+        f"{t['icon']} {t['title']}</div>"
+        f"<div style='font-size:.72rem;color:#6B7A90;line-height:1.4'>{prompt_short}</div>"
+        f"</div>",
+        unsafe_allow_html=True)
+    if show_delete:
+        _cb1, _cb2 = st.columns([3,1])
+        with _cb1:
+            if st.button('▶ Kullan', key=key, use_container_width=True):
+                st.session_state.lp = t['prompt']; st.rerun()
+        with _cb2:
+            if st.button('🗑', key=del_key, use_container_width=True):
+                templates_delete(t['id'], st.session_state.user_id, st.session_state.role)
+                st.rerun()
+    else:
+        if st.button('▶ Kullan', key=key, use_container_width=True):
+            st.session_state.lp = t['prompt']; st.rerun()
+
 # ── Ana 3 sekme ──────────────────────────────────────────────────────────
 _scope_tabs = st.tabs([
-    f'🌐 Sistem ({len(_sys_tmpls)})',
-    f'👥 Ekip ({len(_team_tmpls)})',
-    f'👤 Kişisel ({len(_per_tmpls)})',
+    f'🌐 Sistem  {len(_sys_tmpls)}',
+    f'👥 Ekip  {len(_team_tmpls)}',
+    f'👤 Kişisel  {len(_per_tmpls)}',
 ])
 
 # ── SİSTEM ŞABLONLARI ─────────────────────────────────────────────────────
 with _scope_tabs[0]:
     if _sys_tmpls:
-        _cats = sorted(set(t['category'] for t in _sys_tmpls))
+        # Admin tüm kategorileri görür, diğerleri sadece şemasıyla uyumlu olanları
+        _visible_sys = _sys_tmpls if st.session_state.role == 'admin' else [
+            t for t in _sys_tmpls
+            if not schema_text or any(
+                kw.lower() in (schema_text or '').lower()
+                for kw in t['title'].lower().split()
+            ) or t['category'] in ['🔍 Denetim']
+        ]
+        if not _visible_sys:
+            _visible_sys = _sys_tmpls  # hiç eşleşme yoksa hepsini göster
+
+        _cats = sorted(set(t['category'] for t in _visible_sys))
         _cat_tabs = st.tabs([c.split(' ',1)[1] if ' ' in c else c for c in _cats])
         for _ci, _ct in enumerate(_cat_tabs):
             with _ct:
-                _ct_tmpls = [t for t in _sys_tmpls if t['category']==_cats[_ci]]
+                _ct_tmpls = [t for t in _visible_sys if t['category']==_cats[_ci]]
                 _tcols = st.columns(min(len(_ct_tmpls), 3))
                 for _ti, _t in enumerate(_ct_tmpls):
                     with _tcols[_ti % 3]:
-                        if st.button(f"{_t['icon']} {_t['title']}",
-                                     key=f"sys_{_t['id']}", use_container_width=True):
-                            st.session_state.lp = _t['prompt']; st.rerun()
+                        _tpl_card(_t, f"sys_{_t['id']}", "#003DA5", "#F0F4FF")
     else:
         st.info('Sistem şablonu yok.')
-    # Admin sistem şablonu ekleyebilir
+
     if st.session_state.role == 'admin':
         with st.expander('➕ Sistem Şablonu Ekle', expanded=False):
             _sc1, _sc2 = st.columns(2)
@@ -2193,22 +2227,19 @@ with _scope_tabs[1]:
         _tcols2 = st.columns(min(len(_team_tmpls), 3))
         for _ti, _t in enumerate(_team_tmpls):
             with _tcols2[_ti % 3]:
-                st.markdown(
-                    f"<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
-                    f"border-radius:8px;padding:.4rem .7rem;margin-bottom:.3rem'>"
-                    f"<div style='font-size:.82rem;font-weight:600;color:#003DA5'>"
-                    f"{_t['icon']} {_t['title']}</div>"
-                    f"<div style='font-size:.68rem;color:#9AA5B4'>👥 {_t.get('team_role','')}</div>"
-                    f"</div>", unsafe_allow_html=True)
-                if st.button('Kullan', key=f"team_{_t['id']}", use_container_width=True):
-                    st.session_state.lp = _t['prompt']; st.rerun()
+                _tpl_card(_t, f"team_{_t['id']}", "#0891B2", "#EBF8FF")
     else:
-        st.info(f"'{st.session_state.role}' ekibi için henüz şablon yok.")
+        st.markdown(
+            f"<div style='background:#F0F4FF;border:1px solid #BFDBFE;border-radius:10px;"
+            f"padding:.8rem 1rem;font-size:.82rem;color:#6B7A90'>"
+            f"👥 <b>{st.session_state.role}</b> ekibi için henüz şablon yok. "
+            f"Aşağıdan ekleyebilirsiniz.</div>",
+            unsafe_allow_html=True)
     with st.expander('➕ Ekip Şablonu Ekle', expanded=False):
         st.caption(f'Bu şablon tüm {st.session_state.role} rolündeki kullanıcılara görünür.')
         _ec1, _ec2 = st.columns(2)
         with _ec1:
-            _e_cat   = st.text_input('Kategori', key='ec_cat', placeholder='📊 Ekip')
+            _e_cat   = st.text_input('Kategori', key='ec_cat', placeholder='📡 Ekibim')
             _e_title = st.text_input('Başlık', key='ec_title')
         with _ec2:
             _e_icon  = st.text_input('İkon', key='ec_icon', value='👥')
@@ -2222,60 +2253,52 @@ with _scope_tabs[1]:
 
 # ── KİŞİSEL ŞABLONLAR ─────────────────────────────────────────────────────
 with _scope_tabs[2]:
-    # Otomatik öneri — sık kullanılan sorgulardan
     _suggestions = templates_auto_suggest(st.session_state.user_id)
     if _suggestions:
         st.markdown(
             "<div style='background:#FFFBEB;border:1px solid #FDE68A;"
-            "border-left:3px solid #D97706;border-radius:8px;"
-            "padding:.5rem .9rem;margin-bottom:.6rem'>"
+            "border-left:3px solid #D97706;border-radius:10px;"
+            "padding:.6rem 1rem;margin-bottom:.7rem'>"
             "<span style='font-size:.65rem;font-weight:700;color:#B45309;"
-            "letter-spacing:1.2px;text-transform:uppercase'>✨ Kişisel Şablon Önerisi</span>"
-            "<br><span style='font-size:.75rem;color:#92400E'>"
+            "letter-spacing:1.2px;text-transform:uppercase'>✨ Otomatik Öneri</span>"
+            "<br><span style='font-size:.78rem;color:#92400E'>"
             "Bu sorguları en az 2 kez sordunuz — kişisel şablonunuza eklemek ister misiniz?</span>"
             "</div>", unsafe_allow_html=True)
         for _sg in _suggestions:
-            _sga, _sgb = st.columns([4, 1])
+            _sga, _sgb = st.columns([5, 1])
             with _sga:
                 st.markdown(
-                    f"<div style='font-size:.82rem;color:#374151;padding:.3rem 0'>"
-                    f"🔁 {_sg['prompt'][:80]}{'…' if len(_sg['prompt'])>80 else ''}"
-                    f"<span style='font-size:.68rem;color:#9AA5B4'> · {_sg['cnt']}x soruldu</span>"
+                    f"<div style='background:#FFFDF5;border:1px solid #FDE68A;"
+                    f"border-radius:8px;padding:.5rem .8rem;margin-bottom:.3rem'>"
+                    f"<div style='font-size:.84rem;font-weight:600;color:#0F1623'>"
+                    f"🔁 {_sg['prompt'][:65]}{'…' if len(_sg['prompt'])>65 else ''}</div>"
+                    f"<div style='font-size:.7rem;color:#9AA5B4;margin-top:.15rem'>"
+                    f"{_sg['cnt']} kez soruldu</div>"
                     f"</div>", unsafe_allow_html=True)
             with _sgb:
-                if st.button('➕ Ekle', key=f"sg_{hash(_sg['prompt'])}", use_container_width=True):
+                if st.button('➕', key=f"sg_{hash(_sg['prompt'])}", use_container_width=True):
                     templates_add(
-                        '⭐ Sık Kullandıklarım',
+                        '⭐ Favorilerim',
                         _sg['prompt'][:40] + ('…' if len(_sg['prompt'])>40 else ''),
                         _sg['prompt'], '⭐',
                         st.session_state.username,
-                        scope='personal',
-                        user_id=st.session_state.user_id
-                    )
-                    st.success('✅ Kişisel şablona eklendi!'); st.rerun()
+                        scope='personal', user_id=st.session_state.user_id)
+                    st.success('✅ Favorilerime eklendi!'); st.rerun()
 
     if _per_tmpls:
         _pcols = st.columns(min(len(_per_tmpls), 3))
         for _pi, _pt in enumerate(_per_tmpls):
             with _pcols[_pi % 3]:
-                st.markdown(
-                    f"<div style='background:#EDFAF3;border:1px solid #A3DFBE;"
-                    f"border-radius:8px;padding:.4rem .7rem;margin-bottom:.3rem'>"
-                    f"<div style='font-size:.82rem;font-weight:600;color:#0D7F4D'>"
-                    f"{_pt['icon']} {_pt['title']}</div>"
-                    f"<div style='font-size:.68rem;color:#9AA5B4'>👤 Kişisel</div>"
-                    f"</div>", unsafe_allow_html=True)
-                _pb1, _pb2 = st.columns(2)
-                with _pb1:
-                    if st.button('Kullan', key=f"per_u_{_pt['id']}", use_container_width=True):
-                        st.session_state.lp = _pt['prompt']; st.rerun()
-                with _pb2:
-                    if st.button('🗑', key=f"per_d_{_pt['id']}", use_container_width=True):
-                        templates_delete(_pt['id'], st.session_state.user_id, st.session_state.role)
-                        st.rerun()
+                _tpl_card(_pt, f"per_u_{_pt['id']}", "#0D7F4D", "#EDFAF3",
+                          "👤", show_delete=True, del_key=f"per_d_{_pt['id']}")
     else:
         if not _suggestions:
-            st.info('Henüz kişisel şablonunuz yok. Aşağıdan ekleyebilir veya sık kullandığınız sorgular otomatik önerilir.')
+            st.markdown(
+                "<div style='background:#F5F7FA;border:1px solid #DCE3ED;border-radius:10px;"
+                "padding:.8rem 1rem;font-size:.82rem;color:#6B7A90'>"
+                "👤 Henüz kişisel şablonunuz yok. Aşağıdan ekleyebilir veya "
+                "sık kullandığınız sorgular otomatik önerilir.</div>",
+                unsafe_allow_html=True)
 
     # Manuel kişisel şablon ekle
     with st.expander('➕ Kişisel Şablon Ekle', expanded=False):
