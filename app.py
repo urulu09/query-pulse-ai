@@ -242,7 +242,8 @@ for k, v in [("history",[]),("qc",0),("tt",0),("lp",""),
               ("user_id",None),("page","main"),
               ("cache_hit",False),("last_res",None),("preview_sql",""),
               ("chat_history",[]),("chat_mode",False),
-              ("briefing_shown",False),("auto_go",False)]:
+              ("briefing_shown",False),("auto_go",False),
+              ("ac_reset",0)]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -2400,7 +2401,7 @@ st.markdown('<div class="card-sep"></div>', unsafe_allow_html=True)
 # ── AKILLI TAMAMLAMA ─────────────────────────────────────────────────────────
 _ac_input = st.text_input(
     'ac_input', value='', placeholder='🔍 Hızlı arama — yazmaya başla, öneri gelsin…',
-    key='ac_input', label_visibility='collapsed')
+    key=f'ac_input_{st.session_state.ac_reset}', label_visibility='collapsed')
 if _ac_input and len(_ac_input) >= 3:
     _ac_conn = get_db()
     _ac_rows = _ac_conn.execute("""
@@ -2437,7 +2438,7 @@ if _ac_input and len(_ac_input) >= 3:
             with _acc2:
                 if st.button('Seç', key=f'ac_{hash(_ac_prompt)}', use_container_width=True):
                     st.session_state.lp = _ac_prompt
-                    st.session_state.ac_input = ''  # arama kutusunu temizle
+                    st.session_state.ac_reset += 1  # widget key değişsin, kutu sıfırlansın
                     st.rerun()
 
 st.markdown('<p class="lbl">✦ Doğal Dil ile Açıkla</p>', unsafe_allow_html=True)
