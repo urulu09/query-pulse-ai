@@ -2175,9 +2175,9 @@ def _tpl_card(t, key, scope_color, scope_bg, show_delete=False, del_key=None):
 
 # ── Ana 3 sekme ──────────────────────────────────────────────────────────
 _scope_tabs = st.tabs([
-    f'🌐 Sistem  {len(_sys_tmpls)}',
-    f'👥 Ekip  {len(_team_tmpls)}',
-    f'👤 Kişisel  {len(_per_tmpls)}',
+    f'Sistem ({len(_sys_tmpls)})',
+    f'Ekip ({len(_team_tmpls)})',
+    f'Kişisel ({len(_per_tmpls)})',
 ])
 
 # ── SİSTEM ŞABLONLARI ─────────────────────────────────────────────────────
