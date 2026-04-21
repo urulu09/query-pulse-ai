@@ -2495,6 +2495,45 @@ if go:
     with col_dl:
         st.markdown(dl(res["sql"]), unsafe_allow_html=True)
 
+    # ── SORGU PAYLAŞMA ─────────────────────────────────────────────────────
+    with st.expander('🤝  Bu Sorguyu Ekiple Paylaş', expanded=False):
+        st.markdown(
+            "<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
+            "border-left:3px solid #003DA5;border-radius:8px;"
+            "padding:.6rem 1rem;margin-bottom:.6rem;font-size:.78rem;color:#374151'>"
+            "Bu SQL sorgusu ekip şablonuna eklenir — "
+            f"tüm <b>{st.session_state.role}</b> rolündeki kullanıcılar kullanabilir."
+            "</div>", unsafe_allow_html=True)
+        _sh_col1, _sh_col2 = st.columns(2)
+        with _sh_col1:
+            _sh_title = st.text_input('Şablon Adı', key='sh_title',
+                placeholder='örn: Gecikmiş Fatura Analizi')
+            _sh_cat   = st.text_input('Kategori', key='sh_cat',
+                value=f'👥 {st.session_state.role.title()}',
+                placeholder='📊 Ekibim')
+        with _sh_col2:
+            _sh_icon  = st.text_input('İkon', key='sh_icon', value='🤝')
+            _sh_scope = st.radio('Kime görünsün?', ['Ekip', 'Kişisel'], key='sh_scope',
+                horizontal=True)
+        if st.button('📤  Paylaş & Şablona Ekle', key='share_sql'):
+            if _sh_title.strip():
+                _scope_val    = 'team'     if _sh_scope == 'Ekip' else 'personal'
+                _team_role_v  = st.session_state.role if _sh_scope == 'Ekip' else None
+                _user_id_v    = st.session_state.user_id if _sh_scope == 'Kişisel' else None
+                templates_add(
+                    _sh_cat, _sh_title.strip(), prompt, _sh_icon,
+                    st.session_state.username,
+                    scope=_scope_val,
+                    user_id=_user_id_v,
+                    team_role=_team_role_v
+                )
+                _msg = f"✅ '{_sh_title}' ekip şablonuna eklendi!" if _sh_scope=='Ekip' \
+                       else f"✅ '{_sh_title}' kişisel şablonuna eklendi!"
+                st.success(_msg)
+                st.rerun()
+            else:
+                st.warning('Şablon adı boş olamaz.')
+
     # ── SONUÇ ÖNİZLEME ───────────────────────────────────────────────────
     _preview_db = st.secrets.get('PREVIEW_DB_URL', '')
     if _preview_db or st.secrets.get('PREVIEW_DB_TYPE',''):
@@ -2534,6 +2573,29 @@ if go:
                             f'<div class="dl-wrap"><a href="data:file/csv;base64,{_csv_b64}"'
                             f' download="result_{_ts}.csv">📥 CSV İndir</a></div>',
                             unsafe_allow_html=True)
+
+                        # ── OTOMATİK GÖRSELLEŞTİRME ────────────────────────
+                        try:
+                            import pandas as _pd_viz
+                            _num_cols = _pdf.select_dtypes(include='number').columns.tolist()
+                            _str_cols = _pdf.select_dtypes(exclude='number').columns.tolist()
+                            if len(_num_cols) >= 1 and len(_str_cols) >= 1 and len(_pdf) <= 50:
+                                _chart_col = _num_cols[0]
+                                _label_col = _str_cols[0]
+                                _chart_df  = _pdf[[_label_col, _chart_col]].copy()
+                                _chart_df  = _chart_df.set_index(_label_col)
+                                st.markdown(
+                                    f"<div style='font-size:.65rem;font-weight:700;color:#003DA5;"
+                                    f"letter-spacing:1.2px;text-transform:uppercase;"
+                                    f"margin:.6rem 0 .3rem'>📊 Otomatik Grafik — {_chart_col}</div>",
+                                    unsafe_allow_html=True)
+                                # Satır sayısına göre grafik tipi seç
+                                if len(_pdf) <= 10:
+                                    st.bar_chart(_chart_df, use_container_width=True)
+                                else:
+                                    st.line_chart(_chart_df, use_container_width=True)
+                        except Exception:
+                            pass  # grafik başarısız olursa sessizce atla
 
                         # ── DOĞAL DİL YORUM ─────────────────────────────────
                         if st.button('📊 Veriyi Türkçe Yorumla', key='interpret_data'):
