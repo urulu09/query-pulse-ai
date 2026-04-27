@@ -2427,7 +2427,14 @@ if _ac_input and len(_ac_input) >= 3:
             "<span style='font-size:.65rem;font-weight:700;color:#003DA5;"
             "letter-spacing:1.2px;text-transform:uppercase'>💡 Öneriler</span>"
             "</div>", unsafe_allow_html=True)
-        for _ac_prompt, _ac_src in _all_ac:
+        # Duplicate prompt'ları filtrele, sırayı koru
+        _seen = set()
+        _unique_ac = []
+        for _p, _s in _all_ac:
+            if _p not in _seen:
+                _seen.add(_p)
+                _unique_ac.append((_p, _s))
+        for _ac_i, (_ac_prompt, _ac_src) in enumerate(_unique_ac):
             _acc1, _acc2 = st.columns([5, 1])
             with _acc1:
                 st.markdown(
@@ -2436,9 +2443,9 @@ if _ac_input and len(_ac_input) >= 3:
                     f"{_ac_prompt[:70]}{'…' if len(_ac_prompt)>70 else ''}</div>",
                     unsafe_allow_html=True)
             with _acc2:
-                if st.button('Seç', key=f'ac_{hash(_ac_prompt)}', use_container_width=True):
+                if st.button('Seç', key=f'ac_{_ac_i}_{st.session_state.ac_reset}', use_container_width=True):
                     st.session_state.lp = _ac_prompt
-                    st.session_state.ac_reset += 1  # widget key değişsin, kutu sıfırlansın
+                    st.session_state.ac_reset += 1
                     st.rerun()
 
 st.markdown('<p class="lbl">✦ Doğal Dil ile Açıkla</p>', unsafe_allow_html=True)
