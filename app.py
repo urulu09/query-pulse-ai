@@ -243,7 +243,7 @@ for k, v in [("history",[]),("qc",0),("tt",0),("lp",""),
               ("cache_hit",False),("last_res",None),("preview_sql",""),
               ("chat_history",[]),("chat_mode",False),
               ("briefing_shown",False),("auto_go",False),
-              ("ac_reset",0),("prompt_reset",0)]:
+              ("ac_reset",0),("prompt_reset",0),("followup_reset",0)]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -2912,9 +2912,12 @@ if go:
     with _chat_col1:
         _followup = st.text_input(
             'followup', placeholder='Örn: Bunları şehre göre grupla · Sadece platinum olanları getir…',
-            key='followup_input', label_visibility='collapsed')
+            key=f'followup_input_{st.session_state.followup_reset}',
+            label_visibility='collapsed')
     with _chat_col2:
-        _followup_go = st.button('➜ Devam', key='followup_go', use_container_width=True)
+        st.markdown("<div style='margin-top:.05rem'></div>", unsafe_allow_html=True)
+        _followup_go = st.button('➜ Devam', key=f'followup_go_{st.session_state.followup_reset}',
+                                 use_container_width=True)
     if _followup_go and _followup.strip():
         _chat_prompt = (
             f'Önceki sorgu: {prompt}\n'
@@ -2926,8 +2929,14 @@ if go:
         st.session_state.chat_history.append({
             'prompt': prompt, 'sql': res['sql'], 'followup': _followup
         })
+        # Eski textarea state'ini temizle
+        _old_pk = f'pk_{st.session_state.prompt_reset}'
+        if _old_pk in st.session_state:
+            del st.session_state[_old_pk]
         st.session_state.lp = _chat_prompt
-        st.session_state.auto_go = True  # ← bir sonraki run'da SQL üretilecek
+        st.session_state.prompt_reset += 1
+        st.session_state.followup_reset += 1
+        st.session_state.auto_go = True
         st.rerun()
     # Chat geçmişi göster
     if st.session_state.chat_history:
