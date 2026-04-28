@@ -243,7 +243,8 @@ for k, v in [("history",[]),("qc",0),("tt",0),("lp",""),
               ("cache_hit",False),("last_res",None),("preview_sql",""),
               ("chat_history",[]),("chat_mode",False),
               ("briefing_shown",False),("auto_go",False),
-              ("ac_reset",0),("prompt_reset",0),("followup_reset",0)]:
+              ("ac_reset",0),("prompt_reset",0),("followup_reset",0),
+              ("explain_result","")]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -2702,7 +2703,8 @@ if go:
                 st.warning('Şablon adı boş olamaz.')
 
     # ── VERİYİ YORUMLA (SQL bazlı) — önizleme yoksa da çalışır ───────────
-    with st.expander('📊  Sorguyu Yorumla — SQL Açıklaması', expanded=False):
+    _has_explain = bool(st.session_state.get('explain_result', ''))
+    with st.expander('📊  Sorguyu Yorumla — SQL Açıklaması', expanded=_has_explain):
         st.markdown(
             "<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
             "border-left:3px solid #003DA5;border-radius:8px;"
@@ -2711,7 +2713,15 @@ if go:
             "Hangi tabloları birleştiriyor, hangi filtre uyguluyor, "
             "neyi getirmeye çalışıyor — net ve iş odaklı."
             "</div>", unsafe_allow_html=True)
-        if st.button('🔍 SQL\'i Türkçe Açıkla', key='explain_sql'):
+        _exp_col1, _exp_col2 = st.columns([3, 1])
+        with _exp_col1:
+            _explain_btn = st.button('🔍 SQL\'i Türkçe Açıkla', key='explain_sql', use_container_width=True)
+        with _exp_col2:
+            if _has_explain:
+                if st.button('🗑 Temizle', key='clear_explain', use_container_width=True):
+                    st.session_state.explain_result = ''
+                    st.rerun()
+        if _explain_btn:
             if not api_key:
                 st.error('⚠️ OpenAI API key tanımlı değil. Streamlit Cloud → Manage app → Secrets içine OPENAI_API_KEY ekleyin.')
             else:
@@ -2728,29 +2738,33 @@ if go:
                         if not _exp or not _exp.strip():
                             st.warning('OpenAI boş yanıt döndü. Tekrar deneyin.')
                         else:
-                            st.success('✅ Açıklama hazır')
-                            _items = [ln.lstrip('•-–* ').strip() for ln in _exp.split('\n') if ln.strip()]
-                            st.markdown(
-                                "<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
-                                "border-left:3px solid #003DA5;border-radius:10px;"
-                                "padding:1rem 1.2rem;margin-top:.6rem'>"
-                                "<div style='font-size:.7rem;font-weight:700;color:#003DA5;"
-                                "letter-spacing:1.2px;text-transform:uppercase;margin-bottom:.6rem'>"
-                                "📊 SQL Açıklaması</div>"
-                                + ''.join(
-                                    f"<div style='display:flex;gap:.6rem;margin-bottom:.5rem;"
-                                    f"padding:.4rem .6rem;background:#fff;border-radius:6px'>"
-                                    f"<span style='color:#003DA5;font-weight:700;flex-shrink:0'>{idx+1}.</span>"
-                                    f"<span style='font-size:.85rem;color:#1A202C;line-height:1.5'>{item}</span></div>"
-                                    for idx, item in enumerate(_items)
-                                )
-                                + "</div>", unsafe_allow_html=True)
+                            st.session_state.explain_result = _exp
+                            st.rerun()
                     except openai.AuthenticationError:
                         st.error('❌ OpenAI API key geçersiz. Streamlit Cloud secrets içinden kontrol edin.')
                     except openai.RateLimitError:
                         st.error('❌ OpenAI rate limit aşıldı. Birkaç saniye sonra tekrar deneyin.')
                     except Exception as _ee:
                         st.error(f'❌ Yorum hatası: {type(_ee).__name__} — {str(_ee)[:200]}')
+        # Önceden alınan sonucu göster
+        if _has_explain:
+            _exp_saved = st.session_state.explain_result
+            _items = [ln.lstrip('•-–* ').strip() for ln in _exp_saved.split('\n') if ln.strip()]
+            st.markdown(
+                "<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
+                "border-left:3px solid #003DA5;border-radius:10px;"
+                "padding:1rem 1.2rem;margin-top:.6rem'>"
+                "<div style='font-size:.7rem;font-weight:700;color:#003DA5;"
+                "letter-spacing:1.2px;text-transform:uppercase;margin-bottom:.6rem'>"
+                "📊 SQL Açıklaması</div>"
+                + ''.join(
+                    f"<div style='display:flex;gap:.6rem;margin-bottom:.5rem;"
+                    f"padding:.5rem .7rem;background:#fff;border-radius:6px'>"
+                    f"<span style='color:#003DA5;font-weight:700;flex-shrink:0'>{idx+1}.</span>"
+                    f"<span style='font-size:.85rem;color:#1A202C;line-height:1.5'>{item}</span></div>"
+                    for idx, item in enumerate(_items)
+                )
+                + "</div>", unsafe_allow_html=True)
 
     # ── SONUÇ ÖNİZLEME ───────────────────────────────────────────────────
     _preview_db = st.secrets.get('PREVIEW_DB_URL', '')
