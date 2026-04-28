@@ -243,7 +243,7 @@ for k, v in [("history",[]),("qc",0),("tt",0),("lp",""),
               ("cache_hit",False),("last_res",None),("preview_sql",""),
               ("chat_history",[]),("chat_mode",False),
               ("briefing_shown",False),("auto_go",False),
-              ("ac_reset",0)]:
+              ("ac_reset",0),("prompt_reset",0)]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -2089,7 +2089,11 @@ if _rec_history:
             with _sug_cols[_si]:
                 _short = _sug[:45] + '…' if len(_sug) > 45 else _sug
                 if st.button(f'🔁 {_short}', key=f'sug_{_si}', use_container_width=True):
+                    _old_key = f'pk_{st.session_state.prompt_reset}'
+                    if _old_key in st.session_state:
+                        del st.session_state[_old_key]
                     st.session_state.lp = _sug
+                    st.session_state.prompt_reset += 1
                     st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -2243,14 +2247,24 @@ def _tpl_card(t, key, scope_color, scope_bg, show_delete=False, del_key=None):
         _cb1, _cb2 = st.columns([4, 1])
         with _cb1:
             if st.button(f'▶  {t["title"]} — Kullan', key=key, use_container_width=True):
-                st.session_state.lp = t['prompt']; st.rerun()
+                _old_key = f'pk_{st.session_state.prompt_reset}'
+                if _old_key in st.session_state:
+                    del st.session_state[_old_key]
+                st.session_state.lp = t['prompt']
+                st.session_state.prompt_reset += 1
+                st.rerun()
         with _cb2:
             if st.button('🗑', key=del_key, use_container_width=True):
                 templates_delete(t['id'], st.session_state.user_id, st.session_state.role)
                 st.rerun()
     else:
         if st.button(f'▶  {t["title"]} — Kullan', key=key, use_container_width=True):
-            st.session_state.lp = t['prompt']; st.rerun()
+            _old_key = f'pk_{st.session_state.prompt_reset}'
+            if _old_key in st.session_state:
+                del st.session_state[_old_key]
+            st.session_state.lp = t['prompt']
+            st.session_state.prompt_reset += 1
+            st.rerun()
 
 # ── Ana 3 sekme ──────────────────────────────────────────────────────────
 _scope_tabs = st.tabs([
@@ -2460,8 +2474,13 @@ if _ac_input and len(_ac_input) >= 2:
                 st.markdown('<div style="margin-top:.4rem"></div>', unsafe_allow_html=True)
                 if st.button('▶ Seç', key=f'ac_{_ac_i}_{st.session_state.ac_reset}',
                              use_container_width=True):
+                    # Önce eski widget state'ini sil
+                    _old_key = f'pk_{st.session_state.prompt_reset}'
+                    if _old_key in st.session_state:
+                        del st.session_state[_old_key]
                     st.session_state.lp = _ac_prompt
                     st.session_state.ac_reset += 1
+                    st.session_state.prompt_reset += 1
                     st.rerun()
     else:
         _no_result = f'🔍 <b style="color:#374151">{_ac_input}</b> için öneri bulunamadı'
@@ -2474,7 +2493,7 @@ if _ac_input and len(_ac_input) >= 2:
 st.markdown('<p class="lbl">✦ Doğal Dil ile Açıkla</p>', unsafe_allow_html=True)
 prompt = st.text_area("p", value=st.session_state.lp, height=120,
     placeholder="Örn. → Geçen ay kaydolan ama henüz sipariş vermemiş kullanıcıları referans kaynağına göre gruplandır…",
-    key="pk", label_visibility="collapsed")
+    key=f"pk_{st.session_state.prompt_reset}", label_visibility="collapsed")
 
 go = st.button("⚡  SQL Oluştur", key="go")
 
