@@ -2703,34 +2703,54 @@ if go:
 
     # ── VERİYİ YORUMLA (SQL bazlı) — önizleme yoksa da çalışır ───────────
     with st.expander('📊  Sorguyu Yorumla — SQL Açıklaması', expanded=False):
-        st.caption('SQL sorgusunun ne yaptığını Türkçe açıklar, potansiyel sonuçları yorumlar.')
+        st.markdown(
+            "<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
+            "border-left:3px solid #003DA5;border-radius:8px;"
+            "padding:.5rem .9rem;margin-bottom:.6rem;font-size:.78rem;color:#374151'>"
+            "💡 SQL sorgusunun <b>ne yaptığını Türkçe</b> açıklar. "
+            "Hangi tabloları birleştiriyor, hangi filtre uyguluyor, "
+            "neyi getirmeye çalışıyor — net ve iş odaklı."
+            "</div>", unsafe_allow_html=True)
         if st.button('🔍 SQL\'i Türkçe Açıkla', key='explain_sql'):
-            with st.spinner('SQL yorumlanıyor…'):
-                try:
-                    _exp_client = openai.OpenAI(api_key=api_key)
-                    _exp_r = _exp_client.chat.completions.create(
-                        model=model, max_tokens=500,
-                        messages=[
-                            {'role':'system','content':'Sen Turkcell kıdemli veri analistisin. SQL sorgularını Türkçe net ve iş odaklı açıkla.'},
-                            {'role':'user','content':f'Aşağıdaki SQL\'i kısa ve net Türkçe madde madde açıkla. Ne sorguluyor, hangi tabloları birleştiriyor, ne amaç güdüyor — maksimum 4 madde.\n\n{res["sql"]}'}
-                        ])
-                    _exp = _exp_r.choices[0].message.content
-                    st.markdown(
-                        "<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
-                        "border-left:3px solid #003DA5;border-radius:10px;"
-                        "padding:.8rem 1.1rem;margin-top:.6rem'>"
-                        "<div style='font-size:.65rem;font-weight:700;color:#003DA5;"
-                        "letter-spacing:1.2px;text-transform:uppercase;margin-bottom:.5rem'>"
-                        "📊 SQL Açıklaması</div>"
-                        + ''.join(
-                            f"<div style='display:flex;gap:.5rem;margin-bottom:.35rem'>"
-                            f"<span style='color:#003DA5;flex-shrink:0'>•</span>"
-                            f"<span style='font-size:.82rem;color:#374151'>{ln.lstrip('•-– ').strip()}</span></div>"
-                            for ln in _exp.split('\n') if ln.strip()
-                        )
-                        + "</div>", unsafe_allow_html=True)
-                except Exception as _ee:
-                    st.error(f'Yorum hatası: {_ee}')
+            if not api_key:
+                st.error('⚠️ OpenAI API key tanımlı değil. Streamlit Cloud → Manage app → Secrets içine OPENAI_API_KEY ekleyin.')
+            else:
+                with st.spinner('SQL analiz ediliyor — birkaç saniye sürebilir…'):
+                    try:
+                        _exp_client = openai.OpenAI(api_key=api_key)
+                        _exp_r = _exp_client.chat.completions.create(
+                            model=model, max_tokens=500,
+                            messages=[
+                                {'role':'system','content':'Sen Turkcell kıdemli veri analistisin. SQL sorgularını Türkçe net ve iş odaklı açıkla. Madde madde yaz.'},
+                                {'role':'user','content':f'Aşağıdaki SQL sorgusunu kısa ve net Türkçe madde madde açıkla. Ne sorguluyor, hangi tabloları birleştiriyor, hangi filtreleri uyguluyor, ne amaç güdüyor. Maksimum 4-5 madde, her madde tek satır.\n\nSQL:\n{res["sql"]}'}
+                            ])
+                        _exp = _exp_r.choices[0].message.content
+                        if not _exp or not _exp.strip():
+                            st.warning('OpenAI boş yanıt döndü. Tekrar deneyin.')
+                        else:
+                            st.success('✅ Açıklama hazır')
+                            _items = [ln.lstrip('•-–* ').strip() for ln in _exp.split('\n') if ln.strip()]
+                            st.markdown(
+                                "<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
+                                "border-left:3px solid #003DA5;border-radius:10px;"
+                                "padding:1rem 1.2rem;margin-top:.6rem'>"
+                                "<div style='font-size:.7rem;font-weight:700;color:#003DA5;"
+                                "letter-spacing:1.2px;text-transform:uppercase;margin-bottom:.6rem'>"
+                                "📊 SQL Açıklaması</div>"
+                                + ''.join(
+                                    f"<div style='display:flex;gap:.6rem;margin-bottom:.5rem;"
+                                    f"padding:.4rem .6rem;background:#fff;border-radius:6px'>"
+                                    f"<span style='color:#003DA5;font-weight:700;flex-shrink:0'>{idx+1}.</span>"
+                                    f"<span style='font-size:.85rem;color:#1A202C;line-height:1.5'>{item}</span></div>"
+                                    for idx, item in enumerate(_items)
+                                )
+                                + "</div>", unsafe_allow_html=True)
+                    except openai.AuthenticationError:
+                        st.error('❌ OpenAI API key geçersiz. Streamlit Cloud secrets içinden kontrol edin.')
+                    except openai.RateLimitError:
+                        st.error('❌ OpenAI rate limit aşıldı. Birkaç saniye sonra tekrar deneyin.')
+                    except Exception as _ee:
+                        st.error(f'❌ Yorum hatası: {type(_ee).__name__} — {str(_ee)[:200]}')
 
     # ── SONUÇ ÖNİZLEME ───────────────────────────────────────────────────
     _preview_db = st.secrets.get('PREVIEW_DB_URL', '')
