@@ -1369,9 +1369,8 @@ def render_risk_score(sql: str) -> None:
         (re.compile(r'\bSELECT\s+\*'),
          "SELECT * kullanımı",
          "Tüm sütunlar çekiliyor. Gereksiz veri transferi yaratır, performansı düşürür ve veri sızıntısı riskini artırır. Yalnızca ihtiyaç duyulan sütunları listeleyin."),
-        (re.compile(r'\bFROM\b(?!.*\bWHERE\b)', re.S),
-         "WHERE filtresi eksik",
-         "Sorgu tüm tabloyu tarayacak. Büyük tablolarda ciddi performans problemi oluşturur. Bir WHERE koşulu ekleyin."),
+        # Akıllı WHERE kontrolü: WHERE/HAVING/JOIN-ON/LIMIT/GROUP BY varsa filtreli kabul et
+        # Aggregation veya basit lookup sorguları false positive vermez
         (re.compile(r'(\bJOIN\b.*){3,}', re.S),
          "3+ JOIN tespit edildi",
          "Çok sayıda JOIN sorgunun karmaşıklığını artırır. Filtre yeterliliğini ve JOIN sırasını gözden geçirin."),
@@ -1407,7 +1406,31 @@ def render_risk_score(sql: str) -> None:
             if pat.search(s):
                 sql_risks.append((title, detail))
 
-    total_sql   = len(RISKY_RULES) + len(INVALID_RULES)
+        # ── AKILLI FİLTRE KONTROLÜ ──────────────────────────────────────
+        # WHERE/HAVING/LIMIT/GROUP BY varsa veya JOIN ON koşulu varsa filtreli sayılır
+        has_where  = bool(re.search(r'\bWHERE\b', s))
+        has_having = bool(re.search(r'\bHAVING\b', s))
+        has_limit  = bool(re.search(r'\bLIMIT\b', s))
+        has_join_on= bool(re.search(r'\bJOIN\b.*\bON\b', s, re.S))
+        has_group  = bool(re.search(r'\bGROUP\s+BY\b', s))
+        has_agg    = bool(re.search(r'\b(COUNT|SUM|AVG|MAX|MIN)\s*\(', s))
+
+        # Sadece SELECT * FROM table; gibi tamamen filtresiz sorgularda uyar
+        is_pure_unfiltered = (
+            not has_where and not has_having and not has_limit
+            and not has_join_on and not has_group and not has_agg
+            and 'FROM' in s
+        )
+        if is_pure_unfiltered:
+            sql_risks.append((
+                "Filtreleme eksik",
+                "Sorgu hiçbir WHERE / GROUP BY / LIMIT içermiyor. Tüm tablo taranacak."
+            ))
+
+    # Akıllı kontrol sayacı eklenince total_sql değişir
+    smart_filter_added = 1
+
+    total_sql   = len(RISKY_RULES) + len(INVALID_RULES) + smart_filter_added
     issues_sql  = len(sql_invalids) + len(sql_risks)
     ok_sql      = total_sql - issues_sql
     pct_ok_sql  = round(ok_sql  / total_sql * 100)
@@ -2634,6 +2657,111 @@ if go:
 
     # ── RISK SCORE ────────────────────────────────────────────────────────
     render_risk_score(res["sql"])
+
+    # ── AUTO-TEST DISCOVERY (Syntax Check) ────────────────────────────────
+    with st.expander('🧪  Otomatik Test — Syntax & Dry-Run Kontrolü', expanded=False):
+        st.markdown(
+            "<div style='background:#F0F4FF;border:1px solid #BFDBFE;"
+            "border-left:3px solid #003DA5;border-radius:8px;"
+            "padding:.5rem .9rem;margin-bottom:.6rem;font-size:.78rem;color:#374151'>"
+            "💡 SQL'i çalıştırmadan önce <b>syntax kontrolü</b> ve <b>dry-run</b> "
+            "(EXPLAIN) testi yapar. Hata varsa yakalar, performans tahminini gösterir."
+            "</div>", unsafe_allow_html=True)
+        if st.button('🧪 SQL\'i Otomatik Test Et', key='auto_test'):
+            _test_results = []
+
+            # Test 1: Boş SQL kontrolü
+            if not res["sql"].strip():
+                _test_results.append(('FAIL', 'Boş SQL', 'SQL içeriği boş'))
+            else:
+                _test_results.append(('PASS', 'SQL içeriği var', f'{len(res["sql"])} karakter'))
+
+            # Test 2: SELECT/INSERT/UPDATE/DELETE/CREATE/ALTER ile başlama kontrolü
+            _first_word = res["sql"].strip().upper().split()[0] if res["sql"].strip() else ''
+            _valid_starts = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER',
+                             'DROP', 'TRUNCATE', 'WITH', 'EXPLAIN']
+            if _first_word in _valid_starts:
+                _test_results.append(('PASS', 'Geçerli başlangıç', f'{_first_word} ile başlıyor'))
+            else:
+                _test_results.append(('FAIL', 'Geçersiz başlangıç', f'{_first_word} ile başlıyor (beklenen: SELECT/INSERT/...)'))
+
+            # Test 3: Parantez dengesi
+            _open_p = res["sql"].count('(')
+            _close_p = res["sql"].count(')')
+            if _open_p == _close_p:
+                _test_results.append(('PASS', 'Parantez dengesi', f'{_open_p} açık = {_close_p} kapalı'))
+            else:
+                _test_results.append(('FAIL', 'Parantez dengesizliği', f'{_open_p} açık ≠ {_close_p} kapalı'))
+
+            # Test 4: Tek tırnak dengesi
+            _quotes = res["sql"].count("'")
+            if _quotes % 2 == 0:
+                _test_results.append(('PASS', 'Tırnak dengesi', f'{_quotes} tırnak (çift)'))
+            else:
+                _test_results.append(('FAIL', 'Tırnak dengesizliği', f'{_quotes} tırnak (tek)'))
+
+            # Test 5: Şema referansı kontrolü
+            if schema_text:
+                _tables_in_schema = re.findall(r'CREATE\s+TABLE\s+(\w+)', schema_text, re.I)
+                _tables_in_sql = re.findall(r'\bFROM\s+(\w+)|\bJOIN\s+(\w+)', res["sql"], re.I)
+                _used_tables = set()
+                for t1, t2 in _tables_in_sql:
+                    _used_tables.add((t1 or t2).lower())
+                _missing = [t for t in _used_tables if t not in [s.lower() for s in _tables_in_schema]]
+                if not _missing:
+                    _test_results.append(('PASS', 'Tablo referansları', f'{len(_used_tables)} tablo şemada mevcut'))
+                else:
+                    _test_results.append(('WARN', 'Bilinmeyen tablo', f'Şemada bulunmayan: {", ".join(_missing[:3])}'))
+            else:
+                _test_results.append(('WARN', 'Şema yok', 'Tablo doğrulaması atlanıyor'))
+
+            # Test 6: PostgreSQL EXPLAIN dry-run (PREVIEW_DB varsa)
+            _preview_db_url = st.secrets.get('PREVIEW_DB_URL', '')
+            if _preview_db_url and dialect.lower() == 'postgresql':
+                try:
+                    import psycopg2
+                    _conn = psycopg2.connect(_preview_db_url)
+                    _cur = _conn.cursor()
+                    _cur.execute(f"EXPLAIN {res['sql']}")
+                    _plan = _cur.fetchall()
+                    _conn.close()
+                    _test_results.append(('PASS', 'EXPLAIN dry-run', f'{len(_plan)} satır plan başarılı'))
+                except Exception as _ex:
+                    _test_results.append(('FAIL', 'EXPLAIN hatası', str(_ex)[:100]))
+            else:
+                _test_results.append(('SKIP', 'EXPLAIN dry-run', 'PREVIEW_DB_URL tanımlı değil'))
+
+            # Sonuçları göster
+            _passed = sum(1 for r,_,_ in _test_results if r == 'PASS')
+            _failed = sum(1 for r,_,_ in _test_results if r == 'FAIL')
+            _warned = sum(1 for r,_,_ in _test_results if r == 'WARN')
+            _total = len(_test_results)
+
+            _overall_color = '#0D7F4D' if _failed == 0 else '#B91C1C'
+            _overall_bg = '#EDFAF3' if _failed == 0 else '#FEF2F2'
+            _overall_text = '✅ TÜM TESTLER GEÇTİ' if _failed == 0 else f'❌ {_failed} TEST BAŞARISIZ'
+
+            st.markdown(
+                f"<div style='background:{_overall_bg};border:2px solid {_overall_color};"
+                f"border-radius:10px;padding:.8rem 1.2rem;margin-bottom:.7rem'>"
+                f"<div style='font-size:1rem;font-weight:700;color:{_overall_color};margin-bottom:.3rem'>"
+                f"{_overall_text}</div>"
+                f"<div style='font-size:.8rem;color:#374151'>"
+                f"{_passed}/{_total} geçti · {_warned} uyarı · {_failed} hata</div>"
+                f"</div>", unsafe_allow_html=True)
+
+            # Test detayları
+            for _status, _title, _detail in _test_results:
+                _icon = {'PASS':'✓', 'FAIL':'✗', 'WARN':'⚠', 'SKIP':'⊘'}.get(_status, '•')
+                _color = {'PASS':'#0D7F4D', 'FAIL':'#B91C1C', 'WARN':'#B45309', 'SKIP':'#6B7A90'}.get(_status, '#6B7A90')
+                _bg = {'PASS':'#EDFAF3', 'FAIL':'#FEF2F2', 'WARN':'#FFFBEB', 'SKIP':'#F5F7FA'}.get(_status, '#F5F7FA')
+                st.markdown(
+                    f"<div style='background:{_bg};border:1px solid {_color}55;"
+                    f"border-left:3px solid {_color};border-radius:6px;"
+                    f"padding:.4rem .8rem;margin-bottom:.25rem'>"
+                    f"<span style='font-size:.85rem;font-weight:700;color:{_color}'>{_icon} {_title}</span>"
+                    f"<span style='font-size:.75rem;color:#6B7A90;margin-left:.5rem'>· {_detail}</span>"
+                    f"</div>", unsafe_allow_html=True)
 
     # ── COPY + DOWNLOAD ───────────────────────────────────────────────────
     col_code, col_dl = st.columns([4, 1])
