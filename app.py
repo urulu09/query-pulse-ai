@@ -1378,11 +1378,7 @@ def render_risk_score(sql: str) -> None:
         (re.compile(r'\bNOT\s+IN\b'),
          "NOT IN operatörü",
          "Büyük alt sorgularda NOT IN ciddi performans kaybına yol açar. NOT EXISTS veya LEFT JOIN ile değiştirilmesi önerilir."),
-        # Sadece WITH/CTE OLMADAN birden fazla SELECT varsa uyar
-        # CTE zaten önerilen yapı, false positive verme
-        (re.compile(r'^(?!.*\bWITH\b).*\bSELECT\b.*\(\s*SELECT\b', re.S | re.I),
-         "İç içe SELECT (subquery)",
-         "Subquery yerine CTE (WITH ...) kullanmak sorguyu daha okunabilir ve optimize edilebilir kılar."),
+        # Subquery tespit (parantez içinde SELECT) — bu kontrol akıllı blokta yapılır
         (re.compile(r'\bUPDATE\b(?!.*\bWHERE\b)', re.S),
          "WHERE'siz UPDATE",
          "WHERE koşulu olmayan UPDATE tüm satırları günceller. Bu geri alınamaz bir veri değişikliğidir."),
@@ -1408,27 +1404,36 @@ def render_risk_score(sql: str) -> None:
 
         # ── AKILLI JOIN KONTROLÜ ──────────────────────────────────────────
         # CTE varsa her CTE içindeki JOIN'leri ayrı sayalım
-        # Sadece bir SELECT bloğunda 3+ JOIN varsa uyar
+        # Eşik: Tek blokta 4+ JOIN varsa uyar (3 JOIN normal birleştirme)
         _has_cte = bool(re.search(r'\bWITH\b', s))
         if _has_cte:
-            # CTE blokları arasındaki JOIN dağılımını kontrol et
             _select_blocks = re.split(r'\bSELECT\b', s)
             _max_joins_per_block = max(
                 len(re.findall(r'\bJOIN\b', block)) for block in _select_blocks
             ) if _select_blocks else 0
-            if _max_joins_per_block >= 3:
+            if _max_joins_per_block >= 4:
                 sql_risks.append((
-                    "3+ JOIN tek blokta",
-                    "Tek bir SELECT bloğunda 3+ JOIN var. CTE ile böl veya filtre ekle."
+                    "4+ JOIN tek blokta",
+                    "Tek bir SELECT bloğunda 4+ JOIN var. CTE ile böl veya filtre ekle."
                 ))
         else:
-            # CTE yoksa toplam JOIN sayısını say
             _total_joins = len(re.findall(r'\bJOIN\b', s))
-            if _total_joins >= 3:
+            if _total_joins >= 4:
                 sql_risks.append((
-                    "3+ JOIN tespit edildi",
+                    "4+ JOIN tespit edildi",
                     "Çok sayıda JOIN sorgunun karmaşıklığını artırır. CTE kullanmayı düşünün."
                 ))
+
+        # ── AKILLI SUBQUERY KONTROLÜ ──────────────────────────────────────
+        # Parantez içinde SELECT varsa subquery — CTE olsa bile uyarı ver
+        # CTE tanımı dışında: WHERE col = (SELECT ...) gibi
+        # Strateji: WITH bloğunu çıkar, geri kalanda paranthesized SELECT ara
+        _sql_no_with = re.sub(r'\bWITH\b.*?\)\s*(?=SELECT)', '', s, count=1, flags=re.S | re.I)
+        if re.search(r'\(\s*SELECT\b', _sql_no_with):
+            sql_risks.append((
+                "İç içe SELECT (subquery)",
+                "Subquery tespit edildi. Performans için CTE (WITH ...) yapısına çevirmeyi düşünün."
+            ))
 
         # ── AKILLI FİLTRE KONTROLÜ ──────────────────────────────────────
         # WHERE/HAVING/LIMIT/GROUP BY varsa veya JOIN ON koşulu varsa filtreli sayılır
