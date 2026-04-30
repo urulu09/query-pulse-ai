@@ -1370,10 +1370,8 @@ def render_risk_score(sql: str) -> None:
          "SELECT * kullanımı",
          "Tüm sütunlar çekiliyor. Gereksiz veri transferi yaratır, performansı düşürür ve veri sızıntısı riskini artırır. Yalnızca ihtiyaç duyulan sütunları listeleyin."),
         # Akıllı WHERE kontrolü: WHERE/HAVING/JOIN-ON/LIMIT/GROUP BY varsa filtreli kabul et
-        # Aggregation veya basit lookup sorguları false positive vermez
-        (re.compile(r'(\bJOIN\b.*){3,}', re.S),
-         "3+ JOIN tespit edildi",
-         "Çok sayıda JOIN sorgunun karmaşıklığını artırır. Filtre yeterliliğini ve JOIN sırasını gözden geçirin."),
+        # CTE içindeki JOIN'ler ayrı sayılır - sadece tek SELECT'te 3+ JOIN sorun
+        # WITH yapısı her CTE'yi izole eder, JOIN'ler dağıtık olur
         (re.compile(r'\bLIKE\s+[\'"]%'),
          "Önek joker (%) kullanımı",
          "LIKE '%deger' şeklindeki sorgular indeksi devre dışı bırakır. Tam tablo taramasına neden olur."),
@@ -1407,6 +1405,30 @@ def render_risk_score(sql: str) -> None:
         for pat, title, detail in RISKY_RULES:
             if pat.search(s):
                 sql_risks.append((title, detail))
+
+        # ── AKILLI JOIN KONTROLÜ ──────────────────────────────────────────
+        # CTE varsa her CTE içindeki JOIN'leri ayrı sayalım
+        # Sadece bir SELECT bloğunda 3+ JOIN varsa uyar
+        _has_cte = bool(re.search(r'\bWITH\b', s))
+        if _has_cte:
+            # CTE blokları arasındaki JOIN dağılımını kontrol et
+            _select_blocks = re.split(r'\bSELECT\b', s)
+            _max_joins_per_block = max(
+                len(re.findall(r'\bJOIN\b', block)) for block in _select_blocks
+            ) if _select_blocks else 0
+            if _max_joins_per_block >= 3:
+                sql_risks.append((
+                    "3+ JOIN tek blokta",
+                    "Tek bir SELECT bloğunda 3+ JOIN var. CTE ile böl veya filtre ekle."
+                ))
+        else:
+            # CTE yoksa toplam JOIN sayısını say
+            _total_joins = len(re.findall(r'\bJOIN\b', s))
+            if _total_joins >= 3:
+                sql_risks.append((
+                    "3+ JOIN tespit edildi",
+                    "Çok sayıda JOIN sorgunun karmaşıklığını artırır. CTE kullanmayı düşünün."
+                ))
 
         # ── AKILLI FİLTRE KONTROLÜ ──────────────────────────────────────
         # WHERE/HAVING/LIMIT/GROUP BY varsa veya JOIN ON koşulu varsa filtreli sayılır
