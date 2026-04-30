@@ -1380,7 +1380,9 @@ def render_risk_score(sql: str) -> None:
         (re.compile(r'\bNOT\s+IN\b'),
          "NOT IN operatörü",
          "Büyük alt sorgularda NOT IN ciddi performans kaybına yol açar. NOT EXISTS veya LEFT JOIN ile değiştirilmesi önerilir."),
-        (re.compile(r'\bSELECT\b.*\bSELECT\b', re.S),
+        # Sadece WITH/CTE OLMADAN birden fazla SELECT varsa uyar
+        # CTE zaten önerilen yapı, false positive verme
+        (re.compile(r'^(?!.*\bWITH\b).*\bSELECT\b.*\(\s*SELECT\b', re.S | re.I),
          "İç içe SELECT (subquery)",
          "Subquery yerine CTE (WITH ...) kullanmak sorguyu daha okunabilir ve optimize edilebilir kılar."),
         (re.compile(r'\bUPDATE\b(?!.*\bWHERE\b)', re.S),
