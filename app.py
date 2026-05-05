@@ -2184,9 +2184,9 @@ schema_text, schema_meta = None, {}
 if uf:
     try:
         raw, chars, tables = parse_schema(uf)
-        if chars > 80_000:
+        if chars > 500_000:
             st.markdown(mk_alert("⚠️", "Dosya Çok Büyük",
-                "Şema 80 KB limitini aşıyor. Kullanılmayan tabloları kaldırın.", "warn"),
+                "Şema 500 KB limitini aşıyor. Kullanılmayan tabloları kaldırın.", "warn"),
                 unsafe_allow_html=True)
         else:
             schema_text = raw
